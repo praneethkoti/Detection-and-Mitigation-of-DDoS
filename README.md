@@ -1,6 +1,8 @@
 
 # DDoS Attack Detection and Mitigation in SDN Using POX Controller
 
+*K. Sai Praneeth and A. Meher Sudhakar — SRM Institute of Science and Technology, November 2021. Academic background: [docs/SDN_DDoS_Report.pdf](docs/SDN_DDoS_Report.pdf).*
+
 This project explores an efficient technique for the **detection and mitigation of Distributed Denial of Service (DDoS) attacks** within **Software Defined Networks (SDN)**, using the centralized **POX controller**. The method employs entropy-based analysis to detect abnormal traffic behavior, along with **Principal Component Analysis (PCA)** for enhancing accuracy in identifying new types of attacks. The ultimate aim is to prevent network disruption while improving traffic management in SDN environments.
 
 ## Overview
@@ -34,18 +36,18 @@ $ sudo mn --switch ovsk --topo tree,depth=2,fanout=8 --controller=remote,ip=127.
 From another terminal, launch the POX controller with the edited detection script:
 ```bash
 $ cd pox
-$ python ./pox.py forwarding.l3_pox_controller
+$ python ./pox.py ddos_sdn.detector.pox_controller
 ```
 
 ### 3. Packet Generation
-1. **Normal Traffic**: To generate normal traffic between hosts, run the traffic generation script from host `h1`:
+1. **Normal Traffic**: To generate benign background traffic between hosts, run the benign generator from host `h1`:
    ```bash
-   $ python traffic_simulator.py --f 2 --e 65
+   $ python -m ddos_sdn.generators.benign_traffic -s 2 -e 65
    ```
 
-2. **DDoS Attack Traffic**: Simulate a DDoS attack from multiple hosts (e.g., `h1`, `h2`, `h3`) targeting a single host (e.g., `h64`):
+2. **DDoS Attack Traffic**: Simulate a volumetric UDP flood from multiple hosts (e.g., `h1`, `h2`, `h3`) targeting a single host (e.g., `h64`):
    ```bash
-   $ python attack_simulator.py 10.0.0.64
+   $ python -m ddos_sdn.generators.udp_flood 10.0.0.64
    ```
 
 ### 4. DDoS Detection
@@ -65,25 +67,17 @@ sudo apt-get install python-scapy
 ```
 
 ### 2. Create Scripts
-a. **Traffic Generation** (`traffic_simulator.py`):
-   - Create this script in the Mininet custom folder for generating normal traffic:
-   ```bash
-   $ cd mininet/custom
-   $ vim traffic_simulator.py
-   ```
+a. **Benign Traffic Generator** (`src/ddos_sdn/generators/benign_traffic.py`):
+   - Generates randomized-source, randomized-destination UDP traffic to establish the no-attack entropy baseline.
 
-b. **DDoS Attack Simulation** (`attack_simulator.py`):
-   - Create this script for simulating attack traffic:
-   ```bash
-   $ vim attack_simulator.py
-   ```
+b. **UDP Flood Generator** (`src/ddos_sdn/generators/udp_flood.py`):
+   - Generates a single-source, single-destination UDP flood — the volumetric L3/L4 DDoS used to drive entropy below threshold.
 
-c. **Detection Script** (`ddos_detection_trainer.py`):
-   - Create the detection script in the POX forwarding directory, which will calculate entropy values:
-   ```bash
-   $ cd pox/pox/forwarding
-   $ vim ddos_detection_trainer.py
-   ```
+c. **Random-Destination Flood** (`src/ddos_sdn/generators/random_dst_flood.py`):
+   - Single source, randomized destinations across `10.0.0.[s..e]` — the "new-type DDoS" case from the companion report where destination-IP entropy fails to detect the attack.
+
+d. **Detection Script** (`src/ddos_sdn/detector/entropy.py`):
+   - `EntropyAnalyzer` — Shannon entropy of destination IPs over fixed-size packet windows. Imported by the POX controller at `src/ddos_sdn/detector/pox_controller.py`.
 
 d. **Modify l3_learning**:
    - Edit or replace the `l3_learning` script to enable detection of DDoS attacks based on entropy.
@@ -96,13 +90,13 @@ d. **Modify l3_learning**:
    - After setting up the Mininet topology, open an xterm window for host `h1` and run the traffic generation script:
    ```bash
    mininet> xterm h1
-   # python traffic_simulator.py --f 2 --e 65
+   # python -m ddos_sdn.generators.benign_traffic -s 2 -e 65
    ```
 
 2. **Launch DDoS Attack**:
    - Open xterm windows for `h1`, `h2`, and `h3` and simulate a DDoS attack targeting `h64`:
    ```bash
-   # python attack_simulator.py 10.0.0.64
+   # python -m ddos_sdn.generators.udp_flood 10.0.0.64
    ```
 
 3. **Monitor Entropy**:

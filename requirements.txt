@@ -1,0 +1,22 @@
+# Runtime dependencies for the offline / generator paths.
+# POX itself is not pip-installable; clone it separately from
+#   https://github.com/noxrepo/pox
+# and run the controller with: ./pox.py log.level --DEBUG ddos_sdn.detector.pox_controller
+
+# Packet crafting + replay
+scapy>=2.5
+
+# Cross-platform network interface discovery (replaces ifconfig|awk)
+psutil>=5.9
+
+# YAML config loading (Phase 1)
+PyYAML>=6.0
+
+# Test runner (Phase 2)
+pytest>=8.0
+
+# ML / PCA stack (Phase 3 — uncomment when notebooks/train_pca_and_rf.ipynb lands)
+# numpy>=1.26
+# pandas>=2.2
+# scikit-learn>=1.4
+# joblib>=1.3

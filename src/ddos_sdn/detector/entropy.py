@@ -1,14 +1,20 @@
+import logging
 import math
-from pox.core import core
 
-logger = core.getLogger()
+try:
+    from pox.core import core
+    logger = core.getLogger()
+except ImportError:
+    logger = logging.getLogger(__name__)
+
 
 class EntropyAnalyzer:
-    packet_count = 0
-    entropy_dict = {}
-    ip_addresses = []
-    dst_entropy = []
-    entropy_value = 1
+    def __init__(self):
+        self.packet_count = 0
+        self.entropy_dict = {}
+        self.ip_addresses = []
+        self.dst_entropy = []
+        self.entropy_value = 1.0
 
     def collect_statistics(self, ip):
         self.packet_count += 1
@@ -44,6 +50,3 @@ class EntropyAnalyzer:
         self.entropy_dict = {}
         self.ip_addresses = []
         self.packet_count = 0
-
-    def __init__(self):
-        pass

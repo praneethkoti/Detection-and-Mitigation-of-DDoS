@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ddos_sdn"
+version = "0.1.0"
+description = "Detection and mitigation of DDoS attacks in Software-Defined Networks (POX/OpenFlow)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "K. Sai Praneeth"},
+    {name = "A. Meher Sudhakar"},
+]
+license = {text = "MIT"}
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

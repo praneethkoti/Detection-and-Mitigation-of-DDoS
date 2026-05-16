@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import time
 from pox.core import core
 from pox.lib.packet.ethernet import ethernet, ETHER_BROADCAST
 from pox.lib.packet.ipv4 import ipv4
@@ -22,18 +23,15 @@ from pox.lib.revent import *
 import pox.openflow.libopenflow_01 as of
 from pox.lib.recoco import Timer
 
-from .detection import EntropyAnalyzer
+from ddos_sdn.detector.entropy import EntropyAnalyzer
 
 entropy_instance = EntropyAnalyzer()
 port_stats = {}
-set_timer = False
 
 log = core.getLogger()
 
 def monitor_ddos(event):
     global port_stats
-    if not set_timer:
-        set_timer = True
 
     if event.connection.dpid not in port_stats:
         port_stats[event.connection.dpid] = {}
@@ -60,6 +58,7 @@ class L3Switch(EventMixin):
         self.fake_gateways = set(fake_gws)
         self.arp_for_unknowns = arp_for_unknowns
         self.arp_cache = {}
+        self._check_timer = Timer(2, check_ddos, recurring=True)
         core.listen_to_dependencies(self)
 
     def handle_packet(self, event):
@@ -77,7 +76,6 @@ class L3Switch(EventMixin):
 
             if entropy_instance.entropy_value < 0.5:
                 monitor_ddos(event)
-                Timer(2, check_ddos, recurring=True)
 
             if packet.next.dstip in self.arp_cache.get(dpid, {}):
                 dst_port = self.arp_cache[dpid][packet.next.dstip].port
@@ -90,8 +88,9 @@ class L3Switch(EventMixin):
     def handle_arp(self, packet, event):
         a = packet.next
         log.info(f"ARP {a.protosrc} => {a.protodst}")
-        if a.protosrc not in self.arp_cache[event.connection.dpid]:
-            self.arp_cache[event.connection.dpid][a.protosrc] = Entry(event.port, packet.src)
+        cache = self.arp_cache.setdefault(event.connection.dpid, {})
+        if a.protosrc not in cache:
+            cache[a.protosrc] = Entry(event.port, packet.src)
 
     def forward_packet(self, event, dst_port):
         actions = []
