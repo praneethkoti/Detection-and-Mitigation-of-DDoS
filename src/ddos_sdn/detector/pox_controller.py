@@ -23,8 +23,10 @@ from pox.lib.revent import *
 import pox.openflow.libopenflow_01 as of
 from pox.lib.recoco import Timer
 
+from ddos_sdn.config import load_config
 from ddos_sdn.detector.entropy import EntropyAnalyzer
 
+cfg = load_config()
 entropy_instance = EntropyAnalyzer()
 port_stats = {}
 
@@ -44,9 +46,10 @@ def monitor_ddos(event):
 
 def check_ddos():
     global port_stats
+    threshold = cfg["detector"]["port_count_threshold"]
     for switch, ports in port_stats.items():
         for port, count in ports.items():
-            if count >= 50:
+            if count >= threshold:
                 log.info(f"DDOS detected on Switch {switch}, Port {port}. Dropping packets...")
                 msg = of.ofp_packet_out(in_port=port)
                 core.openflow.sendToDPID(switch, msg)
@@ -58,7 +61,9 @@ class L3Switch(EventMixin):
         self.fake_gateways = set(fake_gws)
         self.arp_for_unknowns = arp_for_unknowns
         self.arp_cache = {}
-        self._check_timer = Timer(2, check_ddos, recurring=True)
+        self._check_timer = Timer(
+            cfg["detector"]["timer_interval_seconds"], check_ddos, recurring=True
+        )
         core.listen_to_dependencies(self)
 
     def handle_packet(self, event):
@@ -71,10 +76,10 @@ class L3Switch(EventMixin):
             return
 
         if isinstance(packet.next, ipv4):
-            entropy_instance.collect_statistics(packet.next.dstip)
+            entropy_instance.collect_statistics(packet.next.dstip, src_ip=packet.next.srcip)
             log.info(f"Entropy Value: {entropy_instance.entropy_value}")
 
-            if entropy_instance.entropy_value < 0.5:
+            if entropy_instance.is_attack():
                 monitor_ddos(event)
 
             if packet.next.dstip in self.arp_cache.get(dpid, {}):
@@ -102,4 +107,4 @@ class Entry(object):
     def __init__(self, port, mac):
         self.port = port
         self.mac = mac
-        self.timeout = time.time() + 120
+        self.timeout = time.time() + cfg["controller"]["arp_entry_timeout_seconds"]

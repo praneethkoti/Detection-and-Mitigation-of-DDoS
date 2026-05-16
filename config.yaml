@@ -1,0 +1,65 @@
+# ddos_sdn — runtime configuration
+#
+# This file holds every tunable threshold for the detector and controller.
+# Override location is resolved in this order:
+#   1. explicit path argument to load_config(...)
+#   2. $DDOS_SDN_CONFIG_FILE environment variable
+#   3. config.yaml at the repository root (this file)
+#   4. built-in defaults compiled into src/ddos_sdn/config.py
+# The built-in defaults keep tests trivial; the YAML keeps production tunable.
+
+# ------------------------------------------------------------------
+# Detector tuning
+# ------------------------------------------------------------------
+detector:
+  # Number of packets per closed entropy window.
+  # Matches the companion report (§5.2) and report figure 6.1.x captions.
+  window_packets: 250
+
+  # Attack threshold expressed in bits (log base 2).
+  # The original report used log10 with threshold 0.5 — converted to log2 that's ~1.66.
+  # For a uniform window of 250 distinct destinations entropy is log2(250) ≈ 7.97;
+  # for a single-target flood entropy is exactly 0.0.
+  entropy_threshold_bits: 1.66
+
+  # Per-(switch, port) packet count above which the controller treats the port
+  # as part of an active flood and applies mitigation.
+  port_count_threshold: 50
+
+  # How often the controller wakes up to evaluate `port_stats` and install
+  # mitigation rules. Seconds.
+  timer_interval_seconds: 2
+
+# ------------------------------------------------------------------
+# Controller behavior
+# ------------------------------------------------------------------
+controller:
+  # How long an ARP cache entry is considered valid. Seconds.
+  arp_entry_timeout_seconds: 120
+
+# ------------------------------------------------------------------
+# Telemetry (the JSON-line contract that demo.py / dashboard.py / CI consume)
+# ------------------------------------------------------------------
+telemetry:
+  format: jsonl
+  # Default sink "-" means sys.stdout. Set to an absolute path to write to disk
+  # (e.g. /var/log/ddos_sdn/telemetry.jsonl). Tests inject an in-memory sink.
+  path: "-"
+  # The 13 fields in the contract. Order is significant: matches
+  # TelemetryEmitter.FIELDS and the table in PROJECT_IMPROVEMENT_PROMPT.md §5.2.
+  # Phase 1 populates 7 fields; the remaining 6 are emitted as JSON null until
+  # the detectors that own them ship (Phase 3 / Phase 4).
+  fields:
+    - t                 # real (Phase 1)
+    - window_packets    # real (Phase 1)
+    - entropy_dst       # real (Phase 1)
+    - entropy_src       # null in Phase 1, populated in Phase 4 §3.10
+    - entropy_size      # null in Phase 1, populated in Phase 4 §3.10
+    - pps               # real (Phase 1)
+    - pca_mahalanobis   # null in Phase 1, populated by PCADetector in Phase 3 §4.1
+    - rf_proba          # null in Phase 1, populated by MLDetector in Phase 3 §4.2
+    - verdict_entropy   # real (Phase 1)
+    - verdict_pca       # null in Phase 1, populated in Phase 3
+    - verdict_rf        # null in Phase 1, populated in Phase 3
+    - top_dst           # real (Phase 1)
+    - top_src           # real (Phase 1) — read by the Phase 3 ofp_flow_mod drop rule

