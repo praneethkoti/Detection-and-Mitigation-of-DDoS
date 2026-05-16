@@ -15,8 +15,10 @@ PyYAML>=6.0
 # Test runner (Phase 2)
 pytest>=8.0
 
-# ML / PCA stack (Phase 3 — uncomment when notebooks/train_pca_and_rf.ipynb lands)
-# numpy>=1.26
-# pandas>=2.2
+# CICDDoS2019 sample extraction (Phase 2 — scripts/extract_sample.py)
+numpy>=1.26
+pandas>=2.2
+
+# Remaining ML stack (Phase 3 — uncomment when notebooks/train_pca_and_rf.ipynb lands)
 # scikit-learn>=1.4
 # joblib>=1.3

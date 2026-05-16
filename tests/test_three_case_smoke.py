@@ -141,6 +141,29 @@ def run_case_random_dst(rng: random.Random) -> CaseResult:
     )
 
 
+# ------------------------------------------------------------------
+# pytest-discoverable wrappers (Phase 2 §2.C). The run_case_* logic
+# above is the single code path; these are one-liner asserts so
+# `python -m pytest` picks up the same coverage that `python tests/
+# test_three_case_smoke.py` exercises via main(). Each wrapper seeds
+# its own Random(42) for pytest's test isolation.
+# ------------------------------------------------------------------
+
+def test_benign_baseline_is_recognized_as_benign() -> None:
+    assert run_case_benign(random.Random(42)).verdict_match
+
+
+def test_single_target_flood_is_recognized_as_attack() -> None:
+    assert run_case_udp_flood(random.Random(42)).verdict_match
+
+
+def test_random_dst_flood_is_known_failure_of_entropy_only_detector() -> None:
+    # verdict_match==True here means "entropy reports BENIGN as expected" —
+    # the case the report's chapter 6 calls out and Phase 3's PCA detector
+    # will be the one to flip from BENIGN to ATTACK.
+    assert run_case_random_dst(random.Random(42)).verdict_match
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Three-generator smoke test for entropy detection.")
     parser.add_argument("--seed", type=int, default=42, help="RNG seed for deterministic IP draws (default: 42)")

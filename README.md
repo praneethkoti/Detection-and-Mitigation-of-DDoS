@@ -12,6 +12,19 @@
 - **Attack threshold.** Entropy below **1.66 bits** (equivalent to the report's original `0.5` in log₁₀ units) flags the window as attack.
 - **Mitigation primitive.** Per-(switch, port) packet counters drive an OpenFlow flow-table drop rule on the offending ingress port.
 
+## Quickstart (offline demo, no SDN required)
+
+```bash
+git clone https://github.com/praneethkoti/Detection-and-Mitigation-of-DDoS
+cd Detection-and-Mitigation-of-DDoS
+pip install -e .
+python demo.py
+```
+
+Expected last line: `[PASS] attack detected within first 500 packets of attack.pcap`.
+
+The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/POX — it replays committed `.pcap` corpora through the entropy detector and exits non-zero if the attack is not detected within budget, so it doubles as a CI smoke test. See [§ Live SDN run](#live-sdn-run) below for the full POX + Mininet path.
+
 ## Overview
 
 Software-Defined Networking (SDN) separates the control plane from the data plane: a single logically-centralized controller programs flow-table rules on every switch in the network. That centralization is also the weakness — a volumetric Distributed Denial of Service (DDoS) attack toward any host in the network forces every new `[srcip, dstip]` pair through the controller as a `PACKET_IN` event, and the controller's queue depth and flow-installation rate become the actual bottleneck before the victim is.
@@ -108,16 +121,7 @@ Sample line during a single-target flood:
 
 This makes `jq '.rf_proba // 0' telemetry.jsonl` safe today and meaningful once the RandomForest detector ships.
 
-## Quickstart
-
-```bash
-git clone https://github.com/praneethkoti/Detection-and-Mitigation-of-DDoS
-cd Detection-and-Mitigation-of-DDoS
-pip install -e .
-python tests/test_three_case_smoke.py
-```
-
-Expected last line: `[SMOKE] PASS`.
+## Live SDN run
 
 For the full live SDN run (Linux + POX + Mininet):
 
@@ -140,6 +144,8 @@ mininet> xterm h2 h3
 ```
 
 Live POX terminal shows JSON-line telemetry; on a flood, `verdict_entropy` flips to `ATTACK`, `entropy_dst` collapses to ~0, and the controller logs `DDOS detected on Switch X, Port Y`. Screenshots of a working run are captured per [docs/screenshots/CHECKLIST.md](docs/screenshots/CHECKLIST.md).
+
+For a guided developer workflow, the `Makefile` exposes the common entry points: `make demo` (offline demo), `make test` (pytest), `make samples` (rebuild the PCAP corpus), `make lint` (compile-check every tracked `.py`).
 
 ## Configuration
 
