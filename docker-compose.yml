@@ -1,0 +1,66 @@
+# docker-compose for the full SDN stack. Phase 3 §3.K.
+#
+# Default `docker compose up` brings up two services: pox controller and
+# mininet topology. The dashboard (Grafana) is opt-in via:
+#
+#     docker compose --profile dashboard up
+#
+# pox runs unprivileged on linux/amd64 and linux/arm64 (Apple Silicon-friendly).
+# mininet requires --privileged + linux/amd64 because Mininet's network
+# namespacing doesn't work on arm64 inside containers; reviewers on Macs
+# should `docker compose up pox` and ignore the mininet service.
+
+services:
+  pox:
+    build:
+      context: .
+      dockerfile: docker/pox/Dockerfile
+    container_name: ddos-sdn-pox
+    command: ["python", "pox.py", "log.level", "--DEBUG", "ddos_sdn.detector.pox_controller"]
+    environment:
+      - DDOS_SDN_CONFIG_FILE=/app/config.yaml
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "6633:6633"
+    networks:
+      - sdn-control
+    volumes:
+      # Mount config + models read-only so the operator can edit/refresh
+      # without rebuilding the image.
+      - ./config.yaml:/app/config.yaml:ro
+      - ./models:/app/models:ro
+
+  mininet:
+    build:
+      context: .
+      dockerfile: docker/mininet/Dockerfile
+    container_name: ddos-sdn-mininet
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    privileged: true
+    depends_on:
+      - pox
+    networks:
+      - sdn-control
+    command:
+      - mn
+      - --switch
+      - ovsk
+      - --topo
+      - tree,depth=2,fanout=8
+      - --controller=remote,ip=pox,port=6633
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: ddos-sdn-grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - sdn-control
+    profiles:
+      - dashboard
+
+networks:
+  sdn-control:
+    driver: bridge

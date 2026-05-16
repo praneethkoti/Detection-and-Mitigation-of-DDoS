@@ -30,12 +30,38 @@ detector:
   # mitigation rules. Seconds.
   timer_interval_seconds: 2
 
+  # Phase 3 §3.B — unsupervised PCA-based anomaly detector.
+  pca:
+    # Trained model artifact produced by notebooks/train_pca_and_rf.ipynb.
+    # Relative to the repo root; resolved at PCADetector.__init__ time.
+    model_path: "models/pca.joblib"
+    # Mahalanobis-distance percentile (over the full 80% benign training portion)
+    # baked into the .joblib payload at training time. The value below is a
+    # documentation echo of what the trained artifact already enforces; runtime
+    # reads the threshold from the artifact, not from this config. Listed here
+    # so a reviewer can grep the calibration choice without opening the notebook.
+    benign_distance_percentile: 99
+
+  # Phase 3 §3.C — supervised RandomForest classifier.
+  rf:
+    model_path: "models/rf.joblib"
+    # P(attack) >= proba_threshold means verdict_rf == "ATTACK". Sklearn's
+    # native default is 0.5; tunable per deployment via this key.
+    proba_threshold: 0.5
+
 # ------------------------------------------------------------------
 # Controller behavior
 # ------------------------------------------------------------------
 controller:
   # How long an ARP cache entry is considered valid. Seconds.
   arp_entry_timeout_seconds: 120
+
+  # Phase 3 §3.A — wall-clock lifetime of the installed ofp_flow_mod drop rule.
+  # After this many seconds the rule expires and the controller resumes
+  # processing PACKET_INs for the source it had been dropping. The retained
+  # nw_src in port_stats means a returning attacker re-trips the threshold
+  # one window later, not port_count_threshold packets later.
+  flow_mod_hard_timeout_seconds: 30
 
 # ------------------------------------------------------------------
 # Telemetry (the JSON-line contract that demo.py / dashboard.py / CI consume)
@@ -47,19 +73,21 @@ telemetry:
   path: "-"
   # The 13 fields in the contract. Order is significant: matches
   # TelemetryEmitter.FIELDS and the table in PROJECT_IMPROVEMENT_PROMPT.md §5.2.
-  # Phase 1 populates 7 fields; the remaining 6 are emitted as JSON null until
-  # the detectors that own them ship (Phase 3 / Phase 4).
+  # As of Phase 3: 8 fields are populated by EntropyAnalyzer in the runtime
+  # detector; the 4 PCA/RF fields are populated by PCADetector / MLDetector
+  # when those detectors run in front of the analyzer (e.g. demo.py wires
+  # all three). entropy_size remains null until Phase 4's packet-size work.
   fields:
     - t                 # real (Phase 1)
     - window_packets    # real (Phase 1)
     - entropy_dst       # real (Phase 1)
-    - entropy_src       # null in Phase 1, populated in Phase 4 §3.10
-    - entropy_size      # null in Phase 1, populated in Phase 4 §3.10
+    - entropy_src       # real (Phase 3 §3.D.1) — Shannon entropy of src IPs
+    - entropy_size      # null until Phase 4 §3.10 (packet-size tracking)
     - pps               # real (Phase 1)
-    - pca_mahalanobis   # null in Phase 1, populated by PCADetector in Phase 3 §4.1
-    - rf_proba          # null in Phase 1, populated by MLDetector in Phase 3 §4.2
+    - pca_mahalanobis   # populated by PCADetector when run (Phase 3 §3.B)
+    - rf_proba          # populated by MLDetector when run (Phase 3 §3.C)
     - verdict_entropy   # real (Phase 1)
-    - verdict_pca       # null in Phase 1, populated in Phase 3
-    - verdict_rf        # null in Phase 1, populated in Phase 3
+    - verdict_pca       # populated by PCADetector when run (Phase 3 §3.B)
+    - verdict_rf        # populated by MLDetector when run (Phase 3 §3.C)
     - top_dst           # real (Phase 1)
     - top_src           # real (Phase 1) — read by the Phase 3 ofp_flow_mod drop rule

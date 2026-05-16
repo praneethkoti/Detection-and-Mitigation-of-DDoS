@@ -16,7 +16,7 @@ import sys
 import time
 from random import randint
 
-from scapy.all import Ether, IP, UDP, sendp
+from scapy.all import IP, UDP, Ether, sendp
 
 DEFAULT_RANGE_START = 2
 DEFAULT_RANGE_END = 64

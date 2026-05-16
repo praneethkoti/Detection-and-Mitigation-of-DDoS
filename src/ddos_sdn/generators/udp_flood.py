@@ -21,7 +21,7 @@ from multiprocessing import Process
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
-from scapy.all import Ether, IP, UDP, sendp  # noqa: E402
+from scapy.all import IP, UDP, Ether, sendp  # noqa: E402
 
 from ddos_sdn.utils.network import resolve_interface  # noqa: E402
 

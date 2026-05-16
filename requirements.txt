@@ -19,6 +19,11 @@ pytest>=8.0
 numpy>=1.26
 pandas>=2.2
 
-# Remaining ML stack (Phase 3 — uncomment when notebooks/train_pca_and_rf.ipynb lands)
-# scikit-learn>=1.4
-# joblib>=1.3
+# ML stack (Phase 3 — consumed by notebooks/train_pca_and_rf.py, PCADetector,
+# MLDetector). The exact versions below are the versions used to produce the
+# committed models/*.joblib artifacts; reloading them on a different minor
+# scikit-learn version may emit InconsistentVersionWarning but unpickling
+# remains functional. If you regenerate the artifacts, pin to whatever sklearn
+# you run.
+scikit-learn==1.8.0
+joblib==1.5.3

@@ -30,14 +30,14 @@ The script:
 4. uses `numpy.random.default_rng(seed=42)` for the index draw — same input + same seed produces a byte-identical output across machines and OSes
 5. prints the sha256 of both the input and the output file on completion, so the values below can be pasted in verbatim
 
-## Expected sha256s (filled in by the candidate after first extraction)
+## Expected sha256s (filled in after first extraction)
 
 ```
-EXPECTED_SOURCE_SHA256 = <computed by candidate>
-EXPECTED_SAMPLE_SHA256 = <computed by candidate>
+EXPECTED_SOURCE_SHA256 = synthetic — see ## Fallback (synth) below
+EXPECTED_SAMPLE_SHA256 = synthetic — see ## Fallback (synth) below
 ```
 
-Once the first extraction has been performed, paste both values here so the Phase 3 review can reproduce the exact bytes the model was trained against. The script's output format is:
+The CSV that ships in this Phase 3 commit was produced via the documented synth-fallback path (see `## Fallback (synth)` near the bottom of this file). When the real CICDDoS2019 dataset becomes available, re-running `scripts/extract_sample.py` will overwrite `samples/cicddos2019_sample.csv` with real-data rows; at that point both placeholders should be replaced with the real `EXPECTED_SOURCE_SHA256` and `EXPECTED_SAMPLE_SHA256` values printed by the script, in this format:
 
 ```
 extract_sample: read   <input_csv>   sha256=<...>   rows=<n_in>
@@ -61,4 +61,32 @@ extract_sample: wrote  <output_csv>  sha256=<...>   rows=<n_out>
 
 ## Scope note
 
-`samples/cicddos2019_sample.csv` is sized for **demo and CI** only — small enough to commit, large enough to fit a PCA + RandomForest training round in a few seconds. The full Phase 3 evaluation results reported in the README (precision / recall / F1 per attack class) are computed against the **complete** CICDDoS2019 dataset, not the sample. The sample exists to give CI and offline demos a real-data path that doesn't depend on a 24 GB download.
+`samples/cicddos2019_sample.csv` is sized for **demo and CI** only — at `--rows 2000` (the default in `scripts/extract_sample.py`) the committed CSV is roughly **5 MB**, large enough to fit a PCA + RandomForest training round in a few seconds. The full Phase 3 evaluation results reported in the README (precision / recall / F1 per attack class) would be computed against the **complete** CICDDoS2019 dataset, not the sample; the sample exists to give CI and offline demos a real-data path that doesn't depend on a 24 GB download.
+
+---
+
+## Fallback (synth)
+
+The version of `samples/cicddos2019_sample.csv` committed in the Phase 3 commit was **not** produced from real CICDDoS2019 data. The UNB download was not available at execution time; the project's Phase 3 plan (§3.E) documents a synth-fallback path that produces a CSV with the **same column shape and Label conventions** the real-data path would produce, but with rows derived from the project's own three smoke generators scaled up.
+
+**Why this path:** keeps Phase 3 unblocked on a single external dependency (UNB CICDDoS2019 access requires acknowledging a click-through license). All other Phase 3 deliverables — `PCADetector`, `MLDetector`, the real `ofp_flow_mod` drop rule, `THREAT_MODEL.md`, Docker, CI — are independent of where the training rows come from. The narrative arc (PCA flips the random-destination flood from BENIGN to ATTACK) is preserved because random_dst's *signature* — high `entropy_dst`, low `entropy_src` — is present in both synth and real CIC-reconstructed packet streams.
+
+**What was generated:**
+- Three traffic regimes from `tests/test_three_case_smoke.py`, scaled to ~10,000 packets per case.
+- 250-packet windows produce 40 feature rows per case → 120 total examples (40 BENIGN, 80 ATTACK).
+- Each row has the 8-feature vector from PROJECT_IMPROVEMENT_PROMPT §3.B plus a `Label` column.
+- `random_dst` rows are labeled `ATTACK` (ground truth — the flood is an attack) even though the entropy-only detector reports BENIGN on them. PCA learns to flip the verdict by gating on `entropy_src ≈ 0` in combination with high `entropy_dst`.
+
+**How to reproduce:**
+
+```bash
+python scripts/build_synth_dataset.py --seed 42
+```
+
+Deterministic — same seed produces a byte-identical CSV across machines and OSes. The script prints the output sha256 on completion:
+
+```
+OUTPUT_SAMPLE_SHA256 = 418d5a9c726f44a40d598ca6c79d9bbf46b6551f9db10f9b3bfa1bdeb0712959
+```
+
+**Looking forward:** Phase 4 (or any later refresh) may revisit with real CICDDoS2019 data once the UNB download completes. The migration is a single command: run `scripts/extract_sample.py` against the downloaded full CSV, paste the new `EXPECTED_SOURCE_SHA256` / `EXPECTED_SAMPLE_SHA256` values above, re-run `notebooks/train_pca_and_rf.ipynb`, refresh the `models/*.joblib` artifacts, update the README §Evaluation table. No detector or test code needs to change — the notebook reads whichever `samples/cicddos2019_sample.csv` is on disk.

@@ -1,0 +1,18 @@
+# Phase 3 §3.M. Run `pre-commit install` once per clone.
+#
+# Hooks: ruff (lint + auto-fix) and black (formatting). Both share their
+# configuration with the project's pyproject.toml [tool.ruff] / [tool.black]
+# blocks, so the pre-commit-time behavior matches `make lint` and CI.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/psf/black
+    rev: 26.5.0
+    hooks:
+      - id: black
+        language_version: python3

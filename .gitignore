@@ -35,7 +35,14 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Phase 3 artifacts (do not commit trained model binaries)
-models/*.joblib
+# Generic model-binary exclusion. The Phase 3 artifacts (pca.joblib, rf.joblib)
+# are explicitly committed (Q7 confirmed: each ~10 KB, well under the 5 MB
+# budget v3 §4.1/§4.2 sets); the rules below catch any future *large*
+# model output that would bloat the repo.
 models/*.pkl
 models/*.h5
+# Larger joblib variants get excluded; the Phase 3 .joblib pair are
+# explicitly allow-listed below.
+models/*-large.joblib
+!models/pca.joblib
+!models/rf.joblib

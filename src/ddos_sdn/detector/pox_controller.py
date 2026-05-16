@@ -12,53 +12,82 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import time
-from pox.core import core
-from pox.lib.packet.ethernet import ethernet, ETHER_BROADCAST
-from pox.lib.packet.ipv4 import ipv4
-from pox.lib.packet.arp import arp
-from pox.lib.addresses import IPAddr, EthAddr
-from pox.lib.revent import *
+
 import pox.openflow.libopenflow_01 as of
+from pox.core import core
+from pox.lib.addresses import IPAddr
+from pox.lib.packet.arp import arp
+from pox.lib.packet.ipv4 import ipv4
 from pox.lib.recoco import Timer
+from pox.lib.revent import *
 
 from ddos_sdn.config import load_config
 from ddos_sdn.detector.entropy import EntropyAnalyzer
 
 cfg = load_config()
 entropy_instance = EntropyAnalyzer()
+
+# Phase 3 §3.A: keyed by (dpid, port) tuple so per-key reset is possible.
+# Each entry: {"count": int, "nw_src": str | None}. nw_src is captured from
+# entropy_instance.top_src at the moment monitor_ddos first records an event
+# on this (dpid, port) — it's the attacker IP the controller will install
+# an ofp_flow_mod drop rule against.
 port_stats = {}
 
 log = core.getLogger()
 
 def monitor_ddos(event):
+    """Record one PACKET_IN event on the (dpid, port) it arrived on.
+
+    Captures the attacker IP from the entropy detector's top_src field the
+    first time we see this key. Caller responsibility (in handle_packet):
+    only invoke when entropy_instance.is_attack() returns True.
+    """
     global port_stats
-
-    if event.connection.dpid not in port_stats:
-        port_stats[event.connection.dpid] = {}
-    if event.port not in port_stats[event.connection.dpid]:
-        port_stats[event.connection.dpid][event.port] = 1
-    else:
-        port_stats[event.connection.dpid][event.port] += 1
-
-    log.info(f"Switch {event.connection.dpid}, Port {event.port}, Count {port_stats[event.connection.dpid][event.port]}")
+    key = (event.connection.dpid, event.port)
+    entry = port_stats.setdefault(key, {"count": 0, "nw_src": None})
+    entry["count"] += 1
+    if entry["nw_src"] is None and entropy_instance.top_src is not None:
+        entry["nw_src"] = entropy_instance.top_src
+    log.info(
+        "monitor_ddos: dpid=%s port=%s count=%d nw_src=%s",
+        key[0], key[1], entry["count"], entry["nw_src"],
+    )
 
 def check_ddos():
-    global port_stats
-    threshold = cfg["detector"]["port_count_threshold"]
-    for switch, ports in port_stats.items():
-        for port, count in ports.items():
-            if count >= threshold:
-                log.info(f"DDOS detected on Switch {switch}, Port {port}. Dropping packets...")
-                msg = of.ofp_packet_out(in_port=port)
-                core.openflow.sendToDPID(switch, msg)
+    """Install ofp_flow_mod drop rules for any (dpid, port) past threshold.
 
-    port_stats = {}
+    Per Phase 3 §3.A, this REPLACES the prior empty ofp_packet_out stub
+    with a real OpenFlow drop rule (actions=[], priority above default,
+    hard_timeout configurable). Per-key reset retains nw_src so a returning
+    attacker re-trips one window later, not port_count_threshold packets
+    later. Non-installed entries are left untouched so accumulation is
+    not blanket-wiped on every tick.
+    """
+    threshold = cfg["detector"]["port_count_threshold"]
+    hard_timeout = cfg["controller"]["flow_mod_hard_timeout_seconds"]
+    for (dpid, port), entry in port_stats.items():
+        if entry["count"] >= threshold and entry["nw_src"] is not None:
+            log.info(
+                "INSTALL DROP RULE: dpid=%s port=%s nw_src=%s hard_timeout=%ds",
+                dpid, port, entry["nw_src"], hard_timeout,
+            )
+            msg = of.ofp_flow_mod(
+                command=of.OFPFC_ADD,
+                match=of.ofp_match(in_port=port, nw_src=IPAddr(entry["nw_src"])),
+                actions=[],  # empty action list == drop in OpenFlow 1.0
+                hard_timeout=hard_timeout,
+                priority=of.OFP_DEFAULT_PRIORITY + 1,  # outrank L3 forward rule
+            )
+            core.openflow.sendToDPID(dpid, msg)
+            # Per-key reset: count back to 0, nw_src retained so the next
+            # threshold crossing after hard_timeout expiry is instant.
+            entry["count"] = 0
 
 class L3Switch(EventMixin):
-    def __init__(self, fake_gws=[], arp_for_unknowns=False):
-        self.fake_gateways = set(fake_gws)
+    def __init__(self, fake_gws=None, arp_for_unknowns=False):
+        self.fake_gateways = set(fake_gws) if fake_gws else set()
         self.arp_for_unknowns = arp_for_unknowns
         self.arp_cache = {}
         self._check_timer = Timer(
@@ -103,7 +132,7 @@ class L3Switch(EventMixin):
         msg = of.ofp_flow_mod(buffer_id=event.ofp.buffer_id, actions=actions)
         event.connection.send(msg)
 
-class Entry(object):
+class Entry:
     def __init__(self, port, mac):
         self.port = port
         self.mac = mac

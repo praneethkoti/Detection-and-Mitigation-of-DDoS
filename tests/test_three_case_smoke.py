@@ -130,9 +130,14 @@ def run_case_random_dst(rng: random.Random) -> CaseResult:
     # below will fail and someone has to make a real decision.
     verdict_match = benign_windows >= EXPECTED_WINDOWS_PER_CASE - 1
 
-    # And we also check the source-IP signal that the Phase 3 mitigation
-    # will key on: top_src must be the attacker.
+    # And we also check the source-IP signals that the Phase 3 mitigation +
+    # PCA detector key on: top_src must be the attacker, and entropy_src
+    # must collapse to ~0 (single source flooding random destinations).
+    # The entropy_src signal is what PCA learns to distinguish random_dst
+    # from benign traffic, since dst-IP entropy alone cannot.
     assert records[-1]["top_src"] == RANDOM_DST_SOURCE, records[-1]
+    assert records[-1]["entropy_src"] is not None, records[-1]
+    assert records[-1]["entropy_src"] < 0.1, records[-1]
 
     return CaseResult(
         name="random_dst", windows=len(records), attack_windows=attack_windows,

@@ -53,7 +53,7 @@ def stratified_sample(df: pd.DataFrame, n_rows: int, seed: int) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     total = len(df)
     parts: list[pd.DataFrame] = []
-    for label, group in df.groupby(LABEL_COLUMN, sort=True):
+    for _label, group in df.groupby(LABEL_COLUMN, sort=True):
         proportion = len(group) / total
         take = max(1, int(round(n_rows * proportion)))
         take = min(take, len(group))

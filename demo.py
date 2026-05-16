@@ -45,11 +45,32 @@ DEFAULT_ATTACK_PCAP = REPO_ROOT / "samples" / "attack.pcap"
 DETECTION_BUDGET_PACKETS = 500
 
 
+def _load_pca_ml() -> tuple[Any, Any]:
+    """Load the Phase 3 PCA + ML detectors if their .joblib files exist.
+
+    Returns (None, None) when models are absent (e.g. fresh clone before
+    notebooks/train_pca_and_rf.ipynb has been run). demo.py degrades
+    gracefully: entropy verdict is unchanged, verdict_pca / verdict_rf
+    stay as JSON null per the Phase 1 schema contract, and the summary
+    line reports n/a for the PCA / RF F1 columns.
+    """
+    try:
+        from ddos_sdn.detector.ml_detector import MLDetector
+        from ddos_sdn.detector.pca_detector import PCADetector
+        pca = PCADetector()
+        rf = MLDetector()
+        return pca, rf
+    except (FileNotFoundError, ImportError):
+        return None, None
+
+
 def _replay_pcap(
     path: Path,
     window: int,
     threshold_bits: float,
     sink: io.TextIOBase,
+    pca_detector: Any = None,
+    ml_detector: Any = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Replay one PCAP through a fresh EntropyAnalyzer.
 
@@ -61,7 +82,13 @@ def _replay_pcap(
     """
     capture = io.StringIO()
     emitter = TelemetryEmitter(sink=capture, clock=lambda: 0.0)
-    analyzer = EntropyAnalyzer(window=window, threshold_bits=threshold_bits, telemetry=emitter)
+    analyzer = EntropyAnalyzer(
+        window=window,
+        threshold_bits=threshold_bits,
+        telemetry=emitter,
+        pca_detector=pca_detector,
+        ml_detector=ml_detector,
+    )
 
     packet_index = 0
     first_attack_packet_index = -1
@@ -91,6 +118,30 @@ def _replay_pcap(
     return records, first_attack_packet_index
 
 
+def _f1_from_records(
+    attack_records: list[dict[str, Any]],
+    normal_records: list[dict[str, Any]],
+    verdict_field: str,
+) -> str:
+    """Compute F1 for one verdict column (entropy / pca / rf) across both pcaps.
+
+    Returns the F1 as a 2-decimal string, or 'n/a' when the field is JSON null
+    on every record (i.e. the corresponding detector was not loaded). This
+    keeps the summary line honest per working agreement #4 — no fabricated F1.
+    """
+    has_values = any(
+        r.get(verdict_field) is not None
+        for r in (*attack_records, *normal_records)
+    )
+    if not has_values:
+        return "n/a"
+    tp = sum(1 for r in attack_records if r.get(verdict_field) == "ATTACK")
+    fp = sum(1 for r in normal_records if r.get(verdict_field) == "ATTACK")
+    fn = sum(1 for r in attack_records if r.get(verdict_field) == "BENIGN")
+    denom = (2 * tp + fp + fn)
+    return f"{(2 * tp / denom):.2f}" if denom else "n/a"
+
+
 def _summarize(
     normal_records: list[dict[str, Any]],
     attack_records: list[dict[str, Any]],
@@ -105,17 +156,12 @@ def _summarize(
     benign_min = min((r["entropy_dst"] for r in normal_records), default=float("nan"))
     attack_min = min((r["entropy_dst"] for r in attack_records), default=float("nan"))
 
-    # Phase 1 entropy-only verdict labels are real; PCA/RF are JSON null
-    # because no Phase 3 detector has shipped yet. F1 for those is n/a until
-    # Phase 3 populates verdict_pca / verdict_rf.
-    if attack_records:
-        tp = sum(1 for r in attack_records if r["verdict_entropy"] == "ATTACK")
-        fp = sum(1 for r in normal_records if r["verdict_entropy"] == "ATTACK")
-        fn = sum(1 for r in attack_records if r["verdict_entropy"] == "BENIGN")
-        denom = (2 * tp + fp + fn)
-        entropy_f1: str = f"{(2 * tp / denom):.2f}" if denom else "n/a"
-    else:
-        entropy_f1 = "n/a"
+    # Phase 3: real F1 for entropy + PCA + RF whenever the underlying verdict
+    # fields are populated. Detectors that didn't load (no .joblib on disk)
+    # leave their verdict fields as JSON null and _f1_from_records returns 'n/a'.
+    entropy_f1 = _f1_from_records(attack_records, normal_records, "verdict_entropy")
+    pca_f1 = _f1_from_records(attack_records, normal_records, "verdict_pca")
+    rf_f1 = _f1_from_records(attack_records, normal_records, "verdict_rf")
 
     # would-install flow_mod: read top_src from the last ATTACK window. Phase 3's
     # real ofp_flow_mod drop rule consumes exactly this field via the telemetry.
@@ -139,7 +185,7 @@ def _summarize(
     )
     err.write(
         f"[SUMMARY] entropy-only F1: {entropy_f1}   "
-        f"PCA-gated F1: n/a   RF F1: n/a\n"
+        f"PCA-gated F1: {pca_f1}   RF F1: {rf_f1}\n"
     )
     err.write(
         f"[SUMMARY] would-install flow_mod: nw_src={flow_mod_src}, in_port=N/A, hard_timeout=30\n"
@@ -197,9 +243,24 @@ def main(argv: list[str] | None = None) -> int:
 
     stdout_sink: io.TextIOBase = io.StringIO() if args.quiet else sys.stdout
 
-    normal_records, _ = _replay_pcap(args.normal_pcap, args.window, args.threshold, stdout_sink)
+    # Phase 3: load PCA + RF detectors if their .joblib artifacts are on disk.
+    # When absent (fresh clone before the training notebook runs), demo.py
+    # degrades gracefully — pca/rf verdict fields stay null, summary reports n/a.
+    pca_det, ml_det = _load_pca_ml()
+    if pca_det is None or ml_det is None:
+        print(
+            "demo: PCA / ML detector artifacts not found; running entropy-only "
+            "(run notebooks/train_pca_and_rf.py to produce them).",
+            file=sys.stderr,
+        )
+
+    normal_records, _ = _replay_pcap(
+        args.normal_pcap, args.window, args.threshold, stdout_sink,
+        pca_detector=pca_det, ml_detector=ml_det,
+    )
     attack_records, first_attack_index = _replay_pcap(
         args.attack_pcap, args.window, args.threshold, stdout_sink,
+        pca_detector=pca_det, ml_detector=ml_det,
     )
 
     if not normal_records and not attack_records:

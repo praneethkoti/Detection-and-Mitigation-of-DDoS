@@ -30,12 +30,11 @@ The Makefile target `make samples` is the usual invocation.
 from __future__ import annotations
 
 import argparse
-import os
 import random
 import sys
 from pathlib import Path
 
-from scapy.all import Ether, IP, UDP, wrpcap
+from scapy.all import IP, UDP, Ether, wrpcap
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SAMPLES_DIR = REPO_ROOT / "samples"

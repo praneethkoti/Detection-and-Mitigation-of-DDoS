@@ -28,9 +28,18 @@ DEFAULTS: dict[str, Any] = {
         "entropy_threshold_bits": 1.66,
         "port_count_threshold": 50,
         "timer_interval_seconds": 2,
+        "pca": {
+            "model_path": "models/pca.joblib",
+            "benign_distance_percentile": 99,
+        },
+        "rf": {
+            "model_path": "models/rf.joblib",
+            "proba_threshold": 0.5,
+        },
     },
     "controller": {
         "arp_entry_timeout_seconds": 120,
+        "flow_mod_hard_timeout_seconds": 30,
     },
     "telemetry": {
         "format": "jsonl",

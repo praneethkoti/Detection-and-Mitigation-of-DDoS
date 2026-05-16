@@ -101,16 +101,16 @@ One closed entropy window emits one JSON line on the configured sink (stdout by 
 | 12 | `top_dst` | string | IPv4 | most-frequent destination IP in this window | real |
 | 13 | `top_src` | string \| null | IPv4 | most-frequent source IP — the field the drop rule reads | real |
 
-Sample line from a benign window:
+Sample line from a benign window (PCA + RF detectors loaded):
 
 ```json
-{"t":1.234,"window_packets":250,"entropy_dst":5.91,"entropy_src":null,"entropy_size":null,"pps":287,"pca_mahalanobis":null,"rf_proba":null,"verdict_entropy":"BENIGN","verdict_pca":null,"verdict_rf":null,"top_dst":"10.0.0.7","top_src":"10.0.0.3"}
+{"t":0.0,"window_packets":250,"entropy_dst":5.80,"entropy_src":7.25,"entropy_size":null,"pps":250000,"pca_mahalanobis":1.98,"rf_proba":0.0,"verdict_entropy":"BENIGN","verdict_pca":"BENIGN","verdict_rf":"BENIGN","top_dst":"10.0.0.19","top_src":"203.0.113.170"}
 ```
 
-Sample line during a single-target flood:
+Sample line during a single-target flood (PCA + RF detectors loaded):
 
 ```json
-{"t":17.500,"window_packets":250,"entropy_dst":0.32,"entropy_src":null,"entropy_size":null,"pps":1042,"pca_mahalanobis":null,"rf_proba":null,"verdict_entropy":"ATTACK","verdict_pca":null,"verdict_rf":null,"top_dst":"10.0.0.64","top_src":"10.0.0.1"}
+{"t":0.0,"window_packets":250,"entropy_dst":0.0,"entropy_src":0.0,"entropy_size":null,"pps":250000,"pca_mahalanobis":51.99,"rf_proba":1.0,"verdict_entropy":"ATTACK","verdict_pca":"ATTACK","verdict_rf":"ATTACK","top_dst":"10.0.0.64","top_src":"10.0.0.1"}
 ```
 
 **Forward-compatibility rules** for this contract:
@@ -119,7 +119,39 @@ Sample line during a single-target flood:
 - New fields are appended.
 - "Not yet shipped" is signalled by JSON `null` — never `0`, never `-1`, never a missing key.
 
-This makes `jq '.rf_proba // 0' telemetry.jsonl` safe today and meaningful once the RandomForest detector ships.
+This makes `jq '.rf_proba // 0' telemetry.jsonl` safe across detector configurations — `null` propagates as `0` for any consumer that doesn't care about whether a detector was loaded.
+
+## Evaluation
+
+Three detectors run on the same per-window 8-feature vector and emit through the same telemetry contract. Numbers below are reproducible from [notebooks/train_pca_and_rf.py](notebooks/train_pca_and_rf.py) (held-out 20% split of `samples/cicddos2019_sample.csv`) and from `python tests/test_three_case_smoke.py` (synthetic three-case suite).
+
+### Held-out evaluation split (synthetic — see [data/README.md](data/README.md))
+
+The `samples/cicddos2019_sample.csv` shipped in this commit was produced via the documented synth-fallback path (`scripts/build_synth_dataset.py`) because the real CICDDoS2019 dataset was not available at execution time. F1 numbers are computed on a stratified 80/20 split of that synth dataset (96 training rows, 24 held-out). When the real CIC data becomes available, regenerating the sample CSV and re-running the notebook will refresh these numbers without any other code change.
+
+| Detector       | Precision | Recall | F1     |
+|---|---:|---:|---:|
+| Entropy-only   |   1.0000  | 0.5000 | 0.6667 |
+| PCA-gated      |   1.0000  | 1.0000 | 1.0000 |
+| RandomForest   |   1.0000  | 1.0000 | 1.0000 |
+
+Confusion matrices (rows = true `[BENIGN, ATTACK]`, cols = predicted `[BENIGN, ATTACK]`):
+
+- entropy: `[[8, 0], [8, 8]]` — the 8 missed ATTACK windows are random-destination floods, the case `entropy_dst` cannot catch
+- PCA-gated: `[[8, 0], [0, 16]]` — random_dst caught via `entropy_src` collapse
+- RandomForest: `[[8, 0], [0, 16]]` — same
+
+### Synthetic three-case suite (`tests/test_three_case_smoke.py`)
+
+| Case                                    | Entropy | PCA      | RandomForest |
+|---|---|---|---|
+| benign baseline                         | BENIGN  | BENIGN   | BENIGN       |
+| single-target flood (`udp_flood`)       | ATTACK  | ATTACK   | ATTACK       |
+| random-destination flood                | ⚠️ BENIGN — entropy fails | **ATTACK** | **ATTACK** |
+
+The random-destination case is the headline. Entropy reports BENIGN by design (`entropy_dst` stays high — the destination distribution is broad even though the packets are a flood); PCA and RandomForest catch it via the per-window 8-feature vector — primarily `entropy_src`, which collapses to ~0 when a single source floods many destinations.
+
+The headline assertion lives in [tests/test_pca_detector.py::test_pca_flips_random_dst_to_attack](tests/test_pca_detector.py). If that test ever fails, the project's narrative arc has regressed.
 
 ## Live SDN run
 

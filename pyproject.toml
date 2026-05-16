@@ -26,3 +26,31 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["notebooks", "docs/screenshots/legacy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "C4"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# pox_controller.py inherits the POX-style `from pox.lib.revent import *`
+# pattern from McCauley's upstream scaffolding (Apache-licensed). The
+# EventMixin / Event names it pulls in are only valid at runtime under POX;
+# ruff can't see them statically. Suppressing F403/F405 only on this file.
+"src/ddos_sdn/detector/pox_controller.py" = ["F403", "F405"]
+# Tests routinely import names that ruff thinks are unused (pytest fixtures).
+"tests/**" = ["F401"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+extend-exclude = '''
+/(
+    notebooks
+  | docs/screenshots/legacy
+)/
+'''

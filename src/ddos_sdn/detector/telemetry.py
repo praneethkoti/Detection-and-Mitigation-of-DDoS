@@ -24,7 +24,8 @@ from __future__ import annotations
 import json
 import sys
 import time
-from typing import Any, Callable, TextIO
+from collections.abc import Callable
+from typing import Any, TextIO
 
 
 class TelemetryEmitter:
