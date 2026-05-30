@@ -41,7 +41,7 @@ import pytest
 # constructor kwargs / call args that pox_controller.py would invoke
 # against a real POX runtime.
 
-_CAPTURED_MESSAGES: list[dict[str, Any]] = []   # messages sent via sendToDPID
+_CAPTURED_MESSAGES: list[dict[str, Any]] = []  # messages sent via sendToDPID
 
 
 class _OfpMatchStub:
@@ -94,6 +94,7 @@ def _install_pox_stubs() -> None:
         @staticmethod
         def getLogger(*_args, **_kw):
             import logging
+
             return logging.getLogger("pox.stub")
 
         @staticmethod
@@ -132,10 +133,12 @@ def _install_pox_stubs() -> None:
     revent.EventMixin = type("EventMixin", (), {})
 
     recoco = sys.modules["pox.lib.recoco"]
+
     class _TimerStub:
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
+
     recoco.Timer = _TimerStub
 
     of = sys.modules["pox.openflow.libopenflow_01"]
@@ -173,10 +176,10 @@ def test_check_ddos_installs_flow_mod_above_threshold() -> None:
     assert isinstance(msg, _OfpFlowModStub)
     assert msg.command == "OFPFC_ADD"
     assert msg.match.in_port == 3
-    assert msg.match.nw_src == "IPAddr(10.0.0.1)"   # stub IPAddr wraps in this prefix
+    assert msg.match.nw_src == "IPAddr(10.0.0.1)"  # stub IPAddr wraps in this prefix
     assert msg.actions == []
     assert msg.hard_timeout == 30
-    assert msg.priority == 32768 + 1   # OFP_DEFAULT_PRIORITY + 1
+    assert msg.priority == 32768 + 1  # OFP_DEFAULT_PRIORITY + 1
 
 
 def test_check_ddos_below_threshold_does_nothing() -> None:
@@ -196,6 +199,6 @@ def test_check_ddos_retains_nw_src_after_install() -> None:
     ctrl.check_ddos()
     entry = ctrl.port_stats[(1, 3)]
     assert entry["count"] == 0, f"count should reset to 0, got {entry['count']}"
-    assert entry["nw_src"] == "10.0.0.1", (
-        f"nw_src should be retained for fast re-install after hard_timeout, got {entry['nw_src']!r}"
-    )
+    assert (
+        entry["nw_src"] == "10.0.0.1"
+    ), f"nw_src should be retained for fast re-install after hard_timeout, got {entry['nw_src']!r}"

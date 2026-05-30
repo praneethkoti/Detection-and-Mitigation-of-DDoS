@@ -37,6 +37,7 @@ port_stats = {}
 
 log = core.getLogger()
 
+
 def monitor_ddos(event):
     """Record one PACKET_IN event on the (dpid, port) it arrived on.
 
@@ -52,8 +53,12 @@ def monitor_ddos(event):
         entry["nw_src"] = entropy_instance.top_src
     log.info(
         "monitor_ddos: dpid=%s port=%s count=%d nw_src=%s",
-        key[0], key[1], entry["count"], entry["nw_src"],
+        key[0],
+        key[1],
+        entry["count"],
+        entry["nw_src"],
     )
+
 
 def check_ddos():
     """Install ofp_flow_mod drop rules for any (dpid, port) past threshold.
@@ -71,7 +76,10 @@ def check_ddos():
         if entry["count"] >= threshold and entry["nw_src"] is not None:
             log.info(
                 "INSTALL DROP RULE: dpid=%s port=%s nw_src=%s hard_timeout=%ds",
-                dpid, port, entry["nw_src"], hard_timeout,
+                dpid,
+                port,
+                entry["nw_src"],
+                hard_timeout,
             )
             msg = of.ofp_flow_mod(
                 command=of.OFPFC_ADD,
@@ -84,6 +92,7 @@ def check_ddos():
             # Per-key reset: count back to 0, nw_src retained so the next
             # threshold crossing after hard_timeout expiry is instant.
             entry["count"] = 0
+
 
 class L3Switch(EventMixin):
     def __init__(self, fake_gws=None, arp_for_unknowns=False):
@@ -131,6 +140,7 @@ class L3Switch(EventMixin):
         actions.append(of.ofp_action_output(port=dst_port))
         msg = of.ofp_flow_mod(buffer_id=event.ofp.buffer_id, actions=actions)
         event.connection.send(msg)
+
 
 class Entry:
     def __init__(self, port, mac):

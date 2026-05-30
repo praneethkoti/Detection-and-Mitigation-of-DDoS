@@ -72,11 +72,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("input_csv", help="path to a full CICDDoS2019 per-attack-class CSV")
     parser.add_argument("output_csv", help="path to write the stratified sample")
     parser.add_argument(
-        "--rows", type=int, default=2000,
+        "--rows",
+        type=int,
+        default=2000,
         help="approximate number of rows in the output sample (default: 2000)",
     )
     parser.add_argument(
-        "--seed", type=int, default=42,
+        "--seed",
+        type=int,
+        default=42,
         help="RNG seed for reproducible row selection (default: 42)",
     )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])

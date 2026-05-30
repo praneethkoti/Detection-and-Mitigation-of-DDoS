@@ -39,10 +39,10 @@ from ddos_sdn.detector.entropy import EntropyAnalyzer
 from ddos_sdn.detector.telemetry import TelemetryEmitter
 
 WINDOW_PACKETS = 250
-PACKETS_PER_CASE = 1000   # closes 4 windows per case
+PACKETS_PER_CASE = 1000  # closes 4 windows per case
 EXPECTED_WINDOWS_PER_CASE = PACKETS_PER_CASE // WINDOW_PACKETS
 
-BENIGN_RANGE = range(2, 65)     # 10.0.0.[2..64]
+BENIGN_RANGE = range(2, 65)  # 10.0.0.[2..64]
 SINGLE_TARGET = "10.0.0.64"
 RANDOM_DST_SOURCE = "10.0.0.1"
 
@@ -74,14 +74,16 @@ def _assert_schema(records: list[dict]) -> None:
     assert len(expected) == 13, f"schema must be 13 fields, got {len(expected)}"
     for r in records:
         got = set(r.keys())
-        assert got == expected, f"telemetry schema drift: missing={expected - got}, extra={got - expected}"
+        assert (
+            got == expected
+        ), f"telemetry schema drift: missing={expected - got}, extra={got - expected}"
 
 
 def run_case_benign(rng: random.Random) -> CaseResult:
     analyzer, buf = _build_analyzer()
     for _ in range(PACKETS_PER_CASE):
         dst = f"10.0.0.{rng.choice(list(BENIGN_RANGE))}"
-        src = f"203.0.113.{rng.randint(1, 254)}"   # TEST-NET-3, public-ish
+        src = f"203.0.113.{rng.randint(1, 254)}"  # TEST-NET-3, public-ish
         analyzer.collect_statistics(dst, src_ip=src)
 
     records = _parse_records(buf)
@@ -91,8 +93,11 @@ def run_case_benign(rng: random.Random) -> CaseResult:
     benign_windows = len(records) - attack_windows
     verdict_match = benign_windows >= EXPECTED_WINDOWS_PER_CASE - 1
     return CaseResult(
-        name="benign", windows=len(records), attack_windows=attack_windows,
-        entropy_dst_min=entropy_min, verdict_match=verdict_match,
+        name="benign",
+        windows=len(records),
+        attack_windows=attack_windows,
+        entropy_dst_min=entropy_min,
+        verdict_match=verdict_match,
     )
 
 
@@ -108,8 +113,11 @@ def run_case_udp_flood(rng: random.Random) -> CaseResult:
     entropy_min = min(r["entropy_dst"] for r in records)
     verdict_match = attack_windows == len(records) and entropy_min == 0.0
     return CaseResult(
-        name="udp_flood", windows=len(records), attack_windows=attack_windows,
-        entropy_dst_min=entropy_min, verdict_match=verdict_match,
+        name="udp_flood",
+        windows=len(records),
+        attack_windows=attack_windows,
+        entropy_dst_min=entropy_min,
+        verdict_match=verdict_match,
     )
 
 
@@ -140,8 +148,11 @@ def run_case_random_dst(rng: random.Random) -> CaseResult:
     assert records[-1]["entropy_src"] < 0.1, records[-1]
 
     return CaseResult(
-        name="random_dst", windows=len(records), attack_windows=attack_windows,
-        entropy_dst_min=entropy_min, verdict_match=verdict_match,
+        name="random_dst",
+        windows=len(records),
+        attack_windows=attack_windows,
+        entropy_dst_min=entropy_min,
+        verdict_match=verdict_match,
         note="expected: entropy fails to detect — Phase 3 PCA addresses this",
     )
 
@@ -153,6 +164,7 @@ def run_case_random_dst(rng: random.Random) -> CaseResult:
 # test_three_case_smoke.py` exercises via main(). Each wrapper seeds
 # its own Random(42) for pytest's test isolation.
 # ------------------------------------------------------------------
+
 
 def test_benign_baseline_is_recognized_as_benign() -> None:
     assert run_case_benign(random.Random(42)).verdict_match
@@ -170,8 +182,12 @@ def test_random_dst_flood_is_known_failure_of_entropy_only_detector() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Three-generator smoke test for entropy detection.")
-    parser.add_argument("--seed", type=int, default=42, help="RNG seed for deterministic IP draws (default: 42)")
+    parser = argparse.ArgumentParser(
+        description="Three-generator smoke test for entropy detection."
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="RNG seed for deterministic IP draws (default: 42)"
+    )
     parser.add_argument("--verbose", action="store_true", help="print every emitted JSON record")
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 

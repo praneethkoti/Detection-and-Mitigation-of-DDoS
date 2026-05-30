@@ -57,8 +57,8 @@ SAMPLES_DIR = REPO_ROOT / "samples"
 OUTPUT_CSV = SAMPLES_DIR / "cicddos2019_sample.csv"
 
 WINDOW = 250
-PACKETS_PER_CASE = 10000          # 40 windows per case at window=250
-BENIGN_RANGE = range(2, 65)       # 10.0.0.[2..64]
+PACKETS_PER_CASE = 10000  # 40 windows per case at window=250
+BENIGN_RANGE = range(2, 65)  # 10.0.0.[2..64]
 SINGLE_TARGET = "10.0.0.64"
 ATTACKER_SRC = "10.0.0.1"
 
@@ -100,14 +100,14 @@ def _window_features(dsts: list[str], srcs: list[str]) -> list[float]:
     top_dst_count = dst_counts.most_common(1)[0][1]
     top_src_count = src_counts.most_common(1)[0][1]
     return [
-        _shannon_bits(dst_counts, n),                # entropy_dst
-        _shannon_bits(src_counts, n),                # entropy_src
-        float(PPS),                                  # pps
-        float(n),                                    # window_packets
-        float(len(src_counts)),                      # unique_src_count
-        float(len(dst_counts)),                      # unique_dst_count
-        top_dst_count / n,                           # top_dst_frequency
-        top_src_count / n,                           # top_src_frequency
+        _shannon_bits(dst_counts, n),  # entropy_dst
+        _shannon_bits(src_counts, n),  # entropy_src
+        float(PPS),  # pps
+        float(n),  # window_packets
+        float(len(src_counts)),  # unique_src_count
+        float(len(dst_counts)),  # unique_dst_count
+        top_dst_count / n,  # top_dst_frequency
+        top_src_count / n,  # top_src_frequency
     ]
 
 
@@ -138,19 +138,22 @@ def build_dataset(seed: int) -> list[tuple[list[float], str]]:
     rng_r = random.Random(seed + 2)
 
     benign = _emit_case(
-        rng_b, PACKETS_PER_CASE,
+        rng_b,
+        PACKETS_PER_CASE,
         dst_fn=lambda r: f"10.0.0.{r.choice(list(BENIGN_RANGE))}",
         src_fn=lambda r: f"203.0.113.{r.randint(1, 254)}",
         label="BENIGN",
     )
     udp_flood = _emit_case(
-        rng_u, PACKETS_PER_CASE,
+        rng_u,
+        PACKETS_PER_CASE,
         dst_fn=lambda r: SINGLE_TARGET,
         src_fn=lambda r: ATTACKER_SRC,
         label="ATTACK",
     )
     random_dst = _emit_case(
-        rng_r, PACKETS_PER_CASE,
+        rng_r,
+        PACKETS_PER_CASE,
         dst_fn=lambda r: f"10.0.0.{r.choice(list(BENIGN_RANGE))}",
         src_fn=lambda r: ATTACKER_SRC,
         label="ATTACK",
@@ -171,11 +174,14 @@ def main(argv: list[str] | None = None) -> int:
         description="Build the synth fallback CSV for Phase 3 (per §3.E).",
     )
     parser.add_argument(
-        "--seed", type=int, default=42,
+        "--seed",
+        type=int,
+        default=42,
         help="RNG seed for deterministic packet draws (default: 42)",
     )
     parser.add_argument(
-        "--output", default=str(OUTPUT_CSV),
+        "--output",
+        default=str(OUTPUT_CSV),
         help=f"output CSV path (default: {OUTPUT_CSV.relative_to(REPO_ROOT)})",
     )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])

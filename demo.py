@@ -57,6 +57,7 @@ def _load_pca_ml() -> tuple[Any, Any]:
     try:
         from ddos_sdn.detector.ml_detector import MLDetector
         from ddos_sdn.detector.pca_detector import PCADetector
+
         pca = PCADetector()
         rf = MLDetector()
         return pca, rf
@@ -129,16 +130,13 @@ def _f1_from_records(
     on every record (i.e. the corresponding detector was not loaded). This
     keeps the summary line honest per working agreement #4 — no fabricated F1.
     """
-    has_values = any(
-        r.get(verdict_field) is not None
-        for r in (*attack_records, *normal_records)
-    )
+    has_values = any(r.get(verdict_field) is not None for r in (*attack_records, *normal_records))
     if not has_values:
         return "n/a"
     tp = sum(1 for r in attack_records if r.get(verdict_field) == "ATTACK")
     fp = sum(1 for r in normal_records if r.get(verdict_field) == "ATTACK")
     fn = sum(1 for r in attack_records if r.get(verdict_field) == "BENIGN")
-    denom = (2 * tp + fp + fn)
+    denom = 2 * tp + fp + fn
     return f"{(2 * tp / denom):.2f}" if denom else "n/a"
 
 
@@ -184,16 +182,14 @@ def _summarize(
         f"entropy_dst min during attack: {attack_min:.2f}\n"
     )
     err.write(
-        f"[SUMMARY] entropy-only F1: {entropy_f1}   "
-        f"PCA-gated F1: {pca_f1}   RF F1: {rf_f1}\n"
+        f"[SUMMARY] entropy-only F1: {entropy_f1}   " f"PCA-gated F1: {pca_f1}   RF F1: {rf_f1}\n"
     )
     err.write(
         f"[SUMMARY] would-install flow_mod: nw_src={flow_mod_src}, in_port=N/A, hard_timeout=30\n"
     )
 
     passed = (
-        attack_windows_entropy >= 1
-        and 0 < first_attack_packet_index <= DETECTION_BUDGET_PACKETS
+        attack_windows_entropy >= 1 and 0 < first_attack_packet_index <= DETECTION_BUDGET_PACKETS
     )
     if passed:
         err.write(
@@ -212,26 +208,35 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config()
     parser = argparse.ArgumentParser(
         description="Offline entropy-DDoS detection demo. Replays two PCAPs "
-                    "through EntropyAnalyzer; exit 0 on attack-detected, 1 otherwise.",
+        "through EntropyAnalyzer; exit 0 on attack-detected, 1 otherwise.",
     )
     parser.add_argument(
-        "--normal-pcap", type=Path, default=DEFAULT_NORMAL_PCAP,
+        "--normal-pcap",
+        type=Path,
+        default=DEFAULT_NORMAL_PCAP,
         help=f"benign baseline PCAP (default: {DEFAULT_NORMAL_PCAP.relative_to(REPO_ROOT)})",
     )
     parser.add_argument(
-        "--attack-pcap", type=Path, default=DEFAULT_ATTACK_PCAP,
+        "--attack-pcap",
+        type=Path,
+        default=DEFAULT_ATTACK_PCAP,
         help=f"attack PCAP (default: {DEFAULT_ATTACK_PCAP.relative_to(REPO_ROOT)})",
     )
     parser.add_argument(
-        "--window", type=int, default=cfg["detector"]["window_packets"],
+        "--window",
+        type=int,
+        default=cfg["detector"]["window_packets"],
         help=f"entropy window in packets (default: {cfg['detector']['window_packets']} from config)",
     )
     parser.add_argument(
-        "--threshold", type=float, default=cfg["detector"]["entropy_threshold_bits"],
+        "--threshold",
+        type=float,
+        default=cfg["detector"]["entropy_threshold_bits"],
         help=f"attack threshold in bits (default: {cfg['detector']['entropy_threshold_bits']} from config)",
     )
     parser.add_argument(
-        "--quiet", action="store_true",
+        "--quiet",
+        action="store_true",
         help="suppress per-window JSON on stdout; only print summary lines on stderr",
     )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
@@ -255,12 +260,20 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     normal_records, _ = _replay_pcap(
-        args.normal_pcap, args.window, args.threshold, stdout_sink,
-        pca_detector=pca_det, ml_detector=ml_det,
+        args.normal_pcap,
+        args.window,
+        args.threshold,
+        stdout_sink,
+        pca_detector=pca_det,
+        ml_detector=ml_det,
     )
     attack_records, first_attack_index = _replay_pcap(
-        args.attack_pcap, args.window, args.threshold, stdout_sink,
-        pca_detector=pca_det, ml_detector=ml_det,
+        args.attack_pcap,
+        args.window,
+        args.threshold,
+        stdout_sink,
+        pca_detector=pca_det,
+        ml_detector=ml_det,
     )
 
     if not normal_records and not attack_records:

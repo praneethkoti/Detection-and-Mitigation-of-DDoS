@@ -79,8 +79,7 @@ class TelemetryEmitter:
         unknown = set(fields) - set(self.FIELDS)
         if unknown:
             raise ValueError(
-                f"telemetry: unknown field(s) {sorted(unknown)}; "
-                f"the schema is {self.FIELDS}"
+                f"telemetry: unknown field(s) {sorted(unknown)}; " f"the schema is {self.FIELDS}"
             )
         record: dict[str, Any] = {name: fields.get(name) for name in self.FIELDS}
         self._sink.write(json.dumps(record, separators=(",", ":")))

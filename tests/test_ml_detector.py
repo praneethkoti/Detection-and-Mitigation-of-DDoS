@@ -23,26 +23,31 @@ def _detector() -> MLDetector:
 
 
 assert FEATURE_COLS == (
-    "entropy_dst", "entropy_src", "pps", "window_packets",
-    "unique_src_count", "unique_dst_count",
-    "top_dst_frequency", "top_src_frequency",
+    "entropy_dst",
+    "entropy_src",
+    "pps",
+    "window_packets",
+    "unique_src_count",
+    "unique_dst_count",
+    "top_dst_frequency",
+    "top_src_frequency",
 ), FEATURE_COLS
 
 
 def test_rf_recognizes_benign_baseline() -> None:
     rf = _detector()
     feature_vector = [5.83, 7.11, 250000.0, 250.0, 156.0, 63.0, 0.036, 0.020]
-    assert rf.verdict(feature_vector) == "BENIGN", (
-        f"benign signature misclassified ATTACK: proba(ATTACK)={rf.proba(feature_vector):.4f}"
-    )
+    assert (
+        rf.verdict(feature_vector) == "BENIGN"
+    ), f"benign signature misclassified ATTACK: proba(ATTACK)={rf.proba(feature_vector):.4f}"
 
 
 def test_rf_recognizes_single_target_flood() -> None:
     rf = _detector()
     feature_vector = [0.0, 0.0, 250000.0, 250.0, 1.0, 1.0, 1.0, 1.0]
-    assert rf.verdict(feature_vector) == "ATTACK", (
-        f"single-target flood misclassified BENIGN: proba(ATTACK)={rf.proba(feature_vector):.4f}"
-    )
+    assert (
+        rf.verdict(feature_vector) == "ATTACK"
+    ), f"single-target flood misclassified BENIGN: proba(ATTACK)={rf.proba(feature_vector):.4f}"
 
 
 def test_rf_flips_random_dst_to_attack() -> None:

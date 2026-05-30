@@ -73,27 +73,38 @@ def generate(
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Benign background UDP traffic generator. "
-                    "Random source IPs (excluding RFC-1918/loopback/link-local), "
-                    "random destinations in 10.0.0.[start..end].",
+        "Random source IPs (excluding RFC-1918/loopback/link-local), "
+        "random destinations in 10.0.0.[start..end].",
     )
     parser.add_argument(
-        "-s", "--start", type=int, default=DEFAULT_RANGE_START,
+        "-s",
+        "--start",
+        type=int,
+        default=DEFAULT_RANGE_START,
         help=f"low end of destination range 10.0.0.X (default: {DEFAULT_RANGE_START})",
     )
     parser.add_argument(
-        "-e", "--end", type=int, default=DEFAULT_RANGE_END,
+        "-e",
+        "--end",
+        type=int,
+        default=DEFAULT_RANGE_END,
         help=f"high end of destination range 10.0.0.X (default: {DEFAULT_RANGE_END})",
     )
     parser.add_argument(
-        "--count", type=int, default=DEFAULT_COUNT,
+        "--count",
+        type=int,
+        default=DEFAULT_COUNT,
         help=f"number of packets to send (default: {DEFAULT_COUNT})",
     )
     parser.add_argument(
-        "--inter", type=float, default=DEFAULT_INTER,
+        "--inter",
+        type=float,
+        default=DEFAULT_INTER,
         help=f"inter-packet delay in seconds (default: {DEFAULT_INTER})",
     )
     parser.add_argument(
-        "--interface", default=None,
+        "--interface",
+        default=None,
         help="network interface to send packets on (default: auto-select via psutil)",
     )
     args = parser.parse_args(argv)

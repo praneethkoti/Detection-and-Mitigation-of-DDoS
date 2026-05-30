@@ -29,6 +29,7 @@ from ddos_sdn.detector.telemetry import TelemetryEmitter
 
 try:
     from pox.core import core
+
     logger = core.getLogger()
 except ImportError:
     logger = logging.getLogger(__name__)
@@ -58,7 +59,9 @@ class EntropyAnalyzer:
         self.threshold_bits: float = (
             threshold_bits if threshold_bits is not None else cfg["entropy_threshold_bits"]
         )
-        self.telemetry: TelemetryEmitter = telemetry if telemetry is not None else TelemetryEmitter()
+        self.telemetry: TelemetryEmitter = (
+            telemetry if telemetry is not None else TelemetryEmitter()
+        )
         self.pca_detector = pca_detector
         self.ml_detector = ml_detector
 
@@ -159,21 +162,25 @@ class EntropyAnalyzer:
             t=t_now,
             window_packets=self.packet_count,
             entropy_dst=entropy,
-            entropy_src=entropy_src,   # Phase 3 §3.D.1
-            entropy_size=None,         # Phase 4 §3.10
+            entropy_src=entropy_src,  # Phase 3 §3.D.1
+            entropy_size=None,  # Phase 4 §3.10
             pps=pps,
-            pca_mahalanobis=pca_mahalanobis,   # Phase 3 §3.B
-            rf_proba=rf_proba,                 # Phase 3 §3.C
+            pca_mahalanobis=pca_mahalanobis,  # Phase 3 §3.B
+            rf_proba=rf_proba,  # Phase 3 §3.C
             verdict_entropy=verdict,
-            verdict_pca=verdict_pca,           # Phase 3 §3.B
-            verdict_rf=verdict_rf,             # Phase 3 §3.C
+            verdict_pca=verdict_pca,  # Phase 3 §3.B
+            verdict_rf=verdict_rf,  # Phase 3 §3.C
             top_dst=top_dst,
             top_src=top_src,
         )
 
         logger.info(
             "window closed: packets=%d entropy_bits=%.3f verdict=%s top_dst=%s top_src=%s",
-            self.packet_count, entropy, verdict, top_dst, top_src,
+            self.packet_count,
+            entropy,
+            verdict,
+            top_dst,
+            top_src,
         )
 
         self.reset_stats()
@@ -214,14 +221,14 @@ class EntropyAnalyzer:
         top_dst_count = dst_counts[top_dst]
         top_src_count = src_counts[top_src]
         return [
-            float(entropy_dst),                # entropy_dst
-            float(entropy_src),                # entropy_src
-            float(pps),                        # pps
-            n,                                 # window_packets
-            float(len(src_counts)),            # unique_src_count
-            float(len(dst_counts)),            # unique_dst_count
-            top_dst_count / n,                 # top_dst_frequency
-            top_src_count / n,                 # top_src_frequency
+            float(entropy_dst),  # entropy_dst
+            float(entropy_src),  # entropy_src
+            float(pps),  # pps
+            n,  # window_packets
+            float(len(src_counts)),  # unique_src_count
+            float(len(dst_counts)),  # unique_dst_count
+            top_dst_count / n,  # top_dst_frequency
+            top_src_count / n,  # top_src_frequency
         ]
 
     def reset_stats(self) -> None:

@@ -49,7 +49,12 @@ def launch_random_dst_flood(
     sent = 0
     while time.time() < end_time:
         dst = random_destination_ip(range_start, range_end)
-        pkt = Ether() / IP(src=source_ip, dst=dst) / UDP(sport=DEFAULT_SPORT, dport=DEFAULT_DPORT) / payload
+        pkt = (
+            Ether()
+            / IP(src=source_ip, dst=dst)
+            / UDP(sport=DEFAULT_SPORT, dport=DEFAULT_DPORT)
+            / payload
+        )
         if interface:
             sendp(pkt, iface=interface, verbose=0)
         else:
@@ -64,31 +69,45 @@ def parse_args(argv):
         description="Random-destination single-source UDP flood across 10.0.0.[s..e].",
     )
     parser.add_argument(
-        "-s", "--start", type=int, default=DEFAULT_RANGE_START,
+        "-s",
+        "--start",
+        type=int,
+        default=DEFAULT_RANGE_START,
         help=f"low end of destination range 10.0.0.X (default: {DEFAULT_RANGE_START})",
     )
     parser.add_argument(
-        "-e", "--end", type=int, default=DEFAULT_RANGE_END,
+        "-e",
+        "--end",
+        type=int,
+        default=DEFAULT_RANGE_END,
         help=f"high end of destination range 10.0.0.X (default: {DEFAULT_RANGE_END})",
     )
     parser.add_argument(
-        "--source-ip", default=DEFAULT_SOURCE_IP,
+        "--source-ip",
+        default=DEFAULT_SOURCE_IP,
         help=f"source IP address (default: {DEFAULT_SOURCE_IP})",
     )
     parser.add_argument(
-        "--duration", type=int, default=DEFAULT_DURATION,
+        "--duration",
+        type=int,
+        default=DEFAULT_DURATION,
         help=f"flood duration in seconds (default: {DEFAULT_DURATION})",
     )
     parser.add_argument(
-        "--rate", type=int, default=DEFAULT_PACKETS_PER_SECOND,
+        "--rate",
+        type=int,
+        default=DEFAULT_PACKETS_PER_SECOND,
         help=f"packets per second (default: {DEFAULT_PACKETS_PER_SECOND})",
     )
     parser.add_argument(
-        "--packet-size", type=int, default=DEFAULT_PACKET_SIZE,
+        "--packet-size",
+        type=int,
+        default=DEFAULT_PACKET_SIZE,
         help=f"packet size in bytes including L2/L3/L4 headers (default: {DEFAULT_PACKET_SIZE})",
     )
     parser.add_argument(
-        "--interface", default=None,
+        "--interface",
+        default=None,
         help="network interface to send packets on (default: scapy auto-select)",
     )
     args = parser.parse_args(argv)
@@ -112,7 +131,9 @@ def main(argv=None):
         packet_size=args.packet_size,
         interface=args.interface,
     )
-    print(f"random_dst_flood: sent {sent} packets from {args.source_ip} to 10.0.0.[{args.start}..{args.end}] over {args.duration}s")
+    print(
+        f"random_dst_flood: sent {sent} packets from {args.source_ip} to 10.0.0.[{args.start}..{args.end}] over {args.duration}s"
+    )
 
 
 if __name__ == "__main__":

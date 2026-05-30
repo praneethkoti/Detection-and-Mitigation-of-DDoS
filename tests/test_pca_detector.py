@@ -38,9 +38,14 @@ def _detector() -> PCADetector:
 #    unique_src_count, unique_dst_count,
 #    top_dst_frequency, top_src_frequency]
 assert FEATURE_COLS == (
-    "entropy_dst", "entropy_src", "pps", "window_packets",
-    "unique_src_count", "unique_dst_count",
-    "top_dst_frequency", "top_src_frequency",
+    "entropy_dst",
+    "entropy_src",
+    "pps",
+    "window_packets",
+    "unique_src_count",
+    "unique_dst_count",
+    "top_dst_frequency",
+    "top_src_frequency",
 ), FEATURE_COLS
 
 
@@ -50,9 +55,9 @@ def test_pca_recognizes_benign_baseline() -> None:
     # Matches build_synth_dataset's benign-row distribution: ~5.8 dst entropy,
     # ~7.1 src entropy, ~156 unique src, ~63 unique dst, low top-frequencies.
     feature_vector = [5.83, 7.11, 250000.0, 250.0, 156.0, 63.0, 0.036, 0.020]
-    assert pca.verdict(feature_vector) == "BENIGN", (
-        f"benign signature was misclassified ATTACK: score={pca.score(feature_vector):.4f}"
-    )
+    assert (
+        pca.verdict(feature_vector) == "BENIGN"
+    ), f"benign signature was misclassified ATTACK: score={pca.score(feature_vector):.4f}"
 
 
 def test_pca_recognizes_single_target_flood() -> None:
@@ -60,9 +65,9 @@ def test_pca_recognizes_single_target_flood() -> None:
     pca = _detector()
     # Matches build_synth_dataset's udp_flood row: zero on both sides, top-freq = 1.0.
     feature_vector = [0.0, 0.0, 250000.0, 250.0, 1.0, 1.0, 1.0, 1.0]
-    assert pca.verdict(feature_vector) == "ATTACK", (
-        f"single-target flood was misclassified BENIGN: score={pca.score(feature_vector):.4f}"
-    )
+    assert (
+        pca.verdict(feature_vector) == "ATTACK"
+    ), f"single-target flood was misclassified BENIGN: score={pca.score(feature_vector):.4f}"
 
 
 def test_pca_flips_random_dst_to_attack() -> None:
