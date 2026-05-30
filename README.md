@@ -1,5 +1,7 @@
 # Detection and Mitigation of DDoS Attacks in Software-Defined Networks
 
+[![CI](https://github.com/praneethkoti/Detection-and-Mitigation-of-DDoS/actions/workflows/ci.yml/badge.svg)](https://github.com/praneethkoti/Detection-and-Mitigation-of-DDoS/actions/workflows/ci.yml)
+
 *Programmable network defense on a POX/OpenFlow control plane: streaming Shannon entropy of destination IPs identifies volumetric L3/L4 floods at the controller, and the controller installs flow-table mitigation on the affected switch port.*
 
 *K. Sai Praneeth and A. Meher Sudhakar — SRM Institute of Science and Technology, November 2021. Academic background: [docs/SDN_DDoS_Report.pdf](docs/SDN_DDoS_Report.pdf).*
