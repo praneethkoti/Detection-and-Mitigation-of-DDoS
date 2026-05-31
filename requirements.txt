@@ -34,3 +34,6 @@ streamlit>=1.40
 plotly>=5.20
 # watchdog enables the --mode tail path for production telemetry replay.
 watchdog>=4.0
+# Make this project itself importable on Streamlit Cloud
+# (locally, devs use `pip install -e .` once; Cloud reinstalls on every deploy)
+-e .
