@@ -1,0 +1,22 @@
+# Streamlit Community Cloud config for the DDoS-SDN dashboard (Phase 4a §4a.K).
+#
+# This file controls the dashboard's theme and server runtime. No secrets
+# live here — Streamlit Cloud reads .streamlit/secrets.toml separately
+# and that file is not in this repo (see streamlit_app.py header comment).
+
+[theme]
+# A subdued blue/red palette so the BENIGN/ATTACK verdict cells stand out
+# against the page background. Reds reserved for attack-state UI.
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f2f6fa"
+textColor = "#262730"
+font = "sans serif"
+
+[server]
+# Streamlit Cloud runs in headless mode by default; local `streamlit run`
+# can rely on the same setting so behavior is identical.
+headless = true
+
+[browser]
+gatherUsageStats = false

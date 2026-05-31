@@ -27,11 +27,27 @@ Expected last line: `[PASS] attack detected within first 500 packets of attack.p
 
 The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/POX — it replays committed `.pcap` corpora through the entropy detector and exits non-zero if the attack is not detected within budget, so it doubles as a CI smoke test. See [§ Live SDN run](#live-sdn-run) below for the full POX + Mininet path.
 
+## Dashboard
+
+![Dashboard screenshot](docs/screenshots/dashboard.png)
+
+> *Screenshot to be captured locally — `streamlit run dashboard.py` and screenshot the resulting browser tab to `docs/screenshots/dashboard.png`. Until then, the live URL below is the canonical view.*
+
+**Live dashboard:** [ddos-sdn-demo.streamlit.app](https://ddos-sdn-demo.streamlit.app) *(URL pending Streamlit Cloud deploy authorization; fallback subdomains in order: `praneeth-ddos-sdn` → `ddos-sdn-detect`. Updated in a follow-up commit once the deploy lands.)*
+
+```bash
+streamlit run dashboard.py
+```
+
+Four stacked panels — per-window entropy time-series (`entropy_dst`, `entropy_src`, `entropy_size` with the 1.66-bit threshold line drawn), three-detector verdict grid (entropy / PCA / RF traffic-lights for the last 20 windows), 2D PCA projection scatter colored by `verdict_pca`, and the would-install `ofp_flow_mod` drop-rule table. The default mode replays `samples/normal.pcap` then `samples/attack.pcap` window-by-window with a 100 ms tick so a reviewer watches the entropy lines collapse on the attack windows. The replay takes about five seconds; `--mode tail` switches to reading `$telemetry_path` from `config.yaml` for production observability.
+
+The Streamlit Community Cloud deploy reads only world-readable committed files (`samples/*.pcap`, `models/*.joblib`, `config.yaml`) — no secrets, no environment variables. Cold-start latency on Community Cloud is 30–60 seconds for a sleeping app; if the URL above is slow to respond, the static screenshot above is the failsafe view.
+
 ## Overview
 
 Software-Defined Networking (SDN) separates the control plane from the data plane: a single logically-centralized controller programs flow-table rules on every switch in the network. That centralization is also the weakness — a volumetric Distributed Denial of Service (DDoS) attack toward any host in the network forces every new `[srcip, dstip]` pair through the controller as a `PACKET_IN` event, and the controller's queue depth and flow-installation rate become the actual bottleneck before the victim is.
 
-This project applies the classical entropy-anomaly detection signal at the controller (NIST SP 800-94; Lakhina, Crovella, and Diot, *SIGCOMM 2005*) to flag flood signatures in real time, and uses the OpenFlow southbound channel to install drop rules on the affected switch ports — the SDN-native equivalent of an inbound ACL on a campus uplink. The detector currently ships entropy-based detection; PCA over standardized flow features and a RandomForest classifier are on the roadmap (see [§ Roadmap](#roadmap)) to address the "new-type DDoS" case where a single source targets randomized destinations and destination-IP entropy stays high.
+This project applies the classical entropy-anomaly detection signal at the controller (NIST SP 800-94; Lakhina, Crovella, and Diot, *SIGCOMM 2005*) to flag flood signatures in real time, and uses the OpenFlow southbound channel to install drop rules on the affected switch ports — the SDN-native equivalent of an inbound ACL on a campus uplink. Three detectors run side-by-side on the same per-window 10-feature vector — destination-IP entropy, PCA-gated Mahalanobis anomaly detection, and a RandomForest classifier — and the README's evaluation section reports F1 for each on the held-out split. PCA and RandomForest are the two detectors that catch the "new-type DDoS" case (a single source flooding randomized destinations) which destination-IP entropy by design does not.
 
 ## Architecture
 
@@ -87,32 +103,32 @@ The smoke test [`tests/test_three_case_smoke.py`](tests/test_three_case_smoke.py
 
 One closed entropy window emits one JSON line on the configured sink (stdout by default). This is the project's external interface — every downstream consumer (a CI smoke test, a future Streamlit dashboard, a `jq` pipeline) reads this contract:
 
-| # | Field | Type | Units | Semantics | Phase 1 |
+| # | Field | Type | Units | Semantics | Status |
 |---:|---|---|---|---|---|
 | 1 | `t` | float | seconds | monotonic time since emitter start | real |
 | 2 | `window_packets` | int | packets | packet count in this closed window | real |
 | 3 | `entropy_dst` | float | bits | Shannon entropy of destination IPs | real |
-| 4 | `entropy_src` | float \| null | bits | Shannon entropy of source IPs (roadmap) | null |
-| 5 | `entropy_size` | float \| null | bits | Shannon entropy of packet sizes (roadmap) | null |
+| 4 | `entropy_src` | float \| null | bits | Shannon entropy of source IPs | real |
+| 5 | `entropy_size` | float \| null | bits | Shannon entropy of packet sizes | real (Phase 4a) |
 | 6 | `pps` | int | pkts/sec | packets per second across this window | real |
-| 7 | `pca_mahalanobis` | float \| null | — | Mahalanobis distance in PCA-projected space (roadmap) | null |
-| 8 | `rf_proba` | float \| null | [0,1] | RandomForest attack-class probability (roadmap) | null |
+| 7 | `pca_mahalanobis` | float \| null | — | Mahalanobis distance in PCA-projected space | real when PCA detector loaded |
+| 8 | `rf_proba` | float \| null | [0,1] | RandomForest attack-class probability | real when RF detector loaded |
 | 9 | `verdict_entropy` | enum | — | `"BENIGN"` or `"ATTACK"` (entropy-only verdict) | real |
-| 10 | `verdict_pca` | enum \| null | — | PCA-gated verdict (roadmap) | null |
-| 11 | `verdict_rf` | enum \| null | — | RandomForest verdict (roadmap) | null |
+| 10 | `verdict_pca` | enum \| null | — | PCA-gated verdict | real when PCA detector loaded |
+| 11 | `verdict_rf` | enum \| null | — | RandomForest verdict | real when RF detector loaded |
 | 12 | `top_dst` | string | IPv4 | most-frequent destination IP in this window | real |
 | 13 | `top_src` | string \| null | IPv4 | most-frequent source IP — the field the drop rule reads | real |
 
-Sample line from a benign window (PCA + RF detectors loaded):
+Sample line from a benign window (PCA + RF detectors loaded, Phase 4a):
 
 ```json
-{"t":0.0,"window_packets":250,"entropy_dst":5.80,"entropy_src":7.25,"entropy_size":null,"pps":250000,"pca_mahalanobis":1.98,"rf_proba":0.0,"verdict_entropy":"BENIGN","verdict_pca":"BENIGN","verdict_rf":"BENIGN","top_dst":"10.0.0.19","top_src":"203.0.113.170"}
+{"t":0.0,"window_packets":250,"entropy_dst":5.80,"entropy_src":7.25,"entropy_size":2.57,"pps":250000,"pca_mahalanobis":1.98,"rf_proba":0.0,"verdict_entropy":"BENIGN","verdict_pca":"BENIGN","verdict_rf":"BENIGN","top_dst":"10.0.0.19","top_src":"203.0.113.170"}
 ```
 
-Sample line during a single-target flood (PCA + RF detectors loaded):
+Sample line during a single-target flood (PCA + RF detectors loaded, Phase 4a):
 
 ```json
-{"t":0.0,"window_packets":250,"entropy_dst":0.0,"entropy_src":0.0,"entropy_size":null,"pps":250000,"pca_mahalanobis":51.99,"rf_proba":1.0,"verdict_entropy":"ATTACK","verdict_pca":"ATTACK","verdict_rf":"ATTACK","top_dst":"10.0.0.64","top_src":"10.0.0.1"}
+{"t":0.0,"window_packets":250,"entropy_dst":0.0,"entropy_src":0.0,"entropy_size":0.0,"pps":250000,"pca_mahalanobis":51.14,"rf_proba":1.0,"verdict_entropy":"ATTACK","verdict_pca":"ATTACK","verdict_rf":"ATTACK","top_dst":"10.0.0.64","top_src":"10.0.0.1"}
 ```
 
 **Forward-compatibility rules** for this contract:
@@ -125,7 +141,7 @@ This makes `jq '.rf_proba // 0' telemetry.jsonl` safe across detector configurat
 
 ## Evaluation
 
-Three detectors run on the same per-window 8-feature vector and emit through the same telemetry contract. Numbers below are reproducible from [notebooks/train_pca_and_rf.py](notebooks/train_pca_and_rf.py) (held-out 20% split of `samples/cicddos2019_sample.csv`) and from `python tests/test_three_case_smoke.py` (synthetic three-case suite).
+Three detectors run on the same 10 per-window features including packet-size entropy and per-window packet-size variance, and emit through the same telemetry contract. Numbers below are reproducible from [notebooks/train_pca_and_rf.py](notebooks/train_pca_and_rf.py) (held-out 20% split of `samples/cicddos2019_sample.csv`) and from `python tests/test_three_case_smoke.py` (synthetic three-case suite).
 
 ### Held-out evaluation split (synthetic — see [data/README.md](data/README.md))
 
@@ -134,14 +150,14 @@ The `samples/cicddos2019_sample.csv` shipped in this commit was produced via the
 | Detector       | Precision | Recall | F1     |
 |---|---:|---:|---:|
 | Entropy-only   |   1.0000  | 0.5000 | 0.6667 |
-| PCA-gated      |   1.0000  | 1.0000 | 1.0000 |
+| PCA-gated      |   0.9412  | 1.0000 | 0.9697 |
 | RandomForest   |   1.0000  | 1.0000 | 1.0000 |
 
 Confusion matrices (rows = true `[BENIGN, ATTACK]`, cols = predicted `[BENIGN, ATTACK]`):
 
 - entropy: `[[8, 0], [8, 8]]` — the 8 missed ATTACK windows are random-destination floods, the case `entropy_dst` cannot catch
-- PCA-gated: `[[8, 0], [0, 16]]` — random_dst caught via `entropy_src` collapse
-- RandomForest: `[[8, 0], [0, 16]]` — same
+- PCA-gated: `[[7, 1], [0, 16]]` — random_dst caught via `entropy_src` and `entropy_size` collapses; one benign window's projection lands above the 99th-percentile threshold (the cost of widening the threshold's input space from 8 features to 10)
+- RandomForest: `[[8, 0], [0, 16]]` — random_dst caught, no false positives
 
 ### Synthetic three-case suite (`tests/test_three_case_smoke.py`)
 
@@ -151,7 +167,7 @@ Confusion matrices (rows = true `[BENIGN, ATTACK]`, cols = predicted `[BENIGN, A
 | single-target flood (`udp_flood`)       | ATTACK  | ATTACK   | ATTACK       |
 | random-destination flood                | ⚠️ BENIGN — entropy fails | **ATTACK** | **ATTACK** |
 
-The random-destination case is the headline. Entropy reports BENIGN by design (`entropy_dst` stays high — the destination distribution is broad even though the packets are a flood); PCA and RandomForest catch it via the per-window 8-feature vector — primarily `entropy_src`, which collapses to ~0 when a single source floods many destinations.
+The random-destination case is the headline. Entropy reports BENIGN by design (`entropy_dst` stays high — the destination distribution is broad even though the packets are a flood); PCA and RandomForest catch it by reading the source-side and size-side feature collapses jointly — `entropy_src` ≈ 0 (one source), `entropy_size` ≈ 0 and `packet_size_std_dev` ≈ 0 (one fixed packet size).
 
 The headline assertion lives in [tests/test_pca_detector.py::test_pca_flips_random_dst_to_attack](tests/test_pca_detector.py). If that test ever fails, the project's narrative arc has regressed.
 
@@ -188,7 +204,7 @@ Every tunable (window size, entropy threshold, port-count threshold, ARP timeout
 ## Engineering skills demonstrated
 
 **Network Security (primary).**
-SDN / OpenFlow 1.0; POX controller framework; L2/L3 switching and ARP cache management; flow-table programming (`ofp_flow_mod`, `ofp_packet_out`, match/actions); network telemetry (per-window flow features, dst/src/payload entropy, packets-per-second per port); DDoS detection and mitigation (volumetric L3/L4 floods, control-plane saturation, low-and-slow reflection); packet capture and replay (Scapy, `.pcap`, `rdpcap`/`sendp`); topology design (Mininet, tree/star/mesh, parameterized link characteristics); IDS/IPS lineage (entropy-anomaly per Lakhina–Crovella–Diot; NIST SP 800-94; MITRE D3FEND Network Traffic Filtering); operational network engineering (VLAN segmentation, ACLs, port security, MAC-based NAC, WiFi SSID/power/channel discipline, UMD IT-20 compliance).
+SDN / OpenFlow 1.0; POX controller framework; L2/L3 switching and ARP cache management; flow-table programming (`ofp_flow_mod`, `ofp_packet_out`, match/actions); network telemetry (per-window flow features — dst/src/payload entropy, packets-per-second per port, packet-size distribution); real-time observability (Streamlit dashboard, JSON-line consumption, Plotly visualization of entropy time-series + PCA projection); DDoS detection and mitigation (volumetric L3/L4 floods, control-plane saturation, low-and-slow reflection); packet capture and replay (Scapy, `.pcap`, `rdpcap`/`sendp`); topology design (Mininet, tree/star/mesh, parameterized link characteristics); IDS/IPS lineage (entropy-anomaly per Lakhina–Crovella–Diot; NIST SP 800-94; MITRE D3FEND Network Traffic Filtering); operational network engineering (VLAN segmentation, ACLs, port security, MAC-based NAC, WiFi SSID/power/channel discipline, UMD IT-20 compliance).
 
 **Cybersecurity (secondary).**
 ML for security (PCA-based unsupervised anomaly detection — roadmap; RandomForest supervised classification — roadmap; train/test discipline on CICDDoS2019); threat modeling (STRIDE for SDN control planes — roadmap); Python tooling (type hints, argparse, structured JSON-line logging, pytest); CI/CD — roadmap; threat intelligence and OSINT in companion work.
@@ -198,10 +214,12 @@ ML for security (PCA-based unsupervised anomaly detection — roadmap; RandomFor
 The 5-phase implementation plan is captured in [PROJECT_IMPROVEMENT_PROMPT.md](PROJECT_IMPROVEMENT_PROMPT.md). Current status:
 
 - **Phase 0 — Make it run.** ✅ Source tree restructured, runtime errors fixed, package pip-installable (commit `5714d69`).
-- **Phase 1 — Make it honest.** ✅ This commit. Window 250, entropy in bits, JSON-line telemetry contract locked, argparse on all generators, config-driven thresholds, README rewritten.
-- **Phase 2 — Make it demoable.** Sample `.pcap` corpus, `demo.py` single-command interview entry point, `pytest` wiring around the smoke test, `.pcap`-replay integration test.
-- **Phase 3 — Make it credible.** Real `ofp_flow_mod` drop rule (replaces the empty `ofp_packet_out`); PCA + RandomForest detectors trained on CICDDoS2019, with `pca_mahalanobis` / `rf_proba` / `verdict_pca` / `verdict_rf` populated in telemetry; `THREAT_MODEL.md`; Docker compose for POX + Mininet + detector; GitHub Actions CI; ruff/black/pre-commit.
-- **Phase 4 — Make it shine.** Source-IP and packet-size entropy; Streamlit dashboard reading the JSON-line stream; multi-controller East-West coordination; comparative evaluation across attack classes.
+- **Phase 1 — Make it honest.** ✅ Window 250, entropy in bits, JSON-line telemetry contract locked, argparse on all generators, config-driven thresholds, README rewritten (commit `a079fc6`).
+- **Phase 2 — Make it demoable.** ✅ Sample `.pcap` corpus, `demo.py` single-command interview entry point, `pytest` wiring around the smoke test, `.pcap`-replay integration test (commit `a67efe9`).
+- **Phase 3 — Make it credible.** ✅ Real `ofp_flow_mod` drop rule, PCA + RandomForest detectors with the random_dst flip narrative, `THREAT_MODEL.md`, Docker compose for POX + Mininet + detector, GitHub Actions CI, ruff/black/pre-commit (commit `f7d39fb`).
+- **Phase 4a — Make it shine (observability slice).** ✅ This commit. Runtime packet-size tracking (`entropy_size` + `packet_size_std_dev`), per-window feature vector grown from 8 to 10, retrained PCA + RF, Streamlit dashboard with four panels (entropy time-series + verdict grid + PCA projection + would-install flow_mod table), `streamlit_app.py` + `.streamlit/config.toml` for Community Cloud, FEATURE_COLS consolidated into `src/ddos_sdn/detector/features.py` as single source of truth.
+- **Phase 4b — Multi-controller.** East-West coordination between POX controllers, per the companion report's chapter 7 future work.
+- **Phase 4c — Cross-class evaluation.** SYN flood, slow-loris, NTP amplification. Cross-attack-class generalization on real CICDDoS2019 once the dataset is staged.
 
 ## Real execution evidence
 

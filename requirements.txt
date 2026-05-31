@@ -27,3 +27,10 @@ pandas>=2.2
 # you run.
 scikit-learn==1.8.0
 joblib==1.5.3
+
+# Streamlit dashboard (Phase 4a — consumed by dashboard.py and the
+# Streamlit Community Cloud deploy via streamlit_app.py).
+streamlit>=1.40
+plotly>=5.20
+# watchdog enables the --mode tail path for production telemetry replay.
+watchdog>=4.0

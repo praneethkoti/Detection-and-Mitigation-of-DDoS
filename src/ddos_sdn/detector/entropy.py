@@ -14,8 +14,10 @@ ddos_sdn.detector.telemetry for the 13-field schema.
 The detector deliberately does not catch the "new-type DDoS" case where a
 single source targets randomized destinations (the report's chapter 6 case 3).
 That case keeps dst-IP entropy high and motivates the PCA / RandomForest
-detectors on the roadmap. tests/test_three_case_smoke.py asserts this
-failure mode explicitly so the roadmap detectors have a baseline to beat.
+detectors. tests/test_three_case_smoke.py asserts this failure mode
+explicitly so the Phase 3 PCA detector has a baseline to beat. The Phase 4a
+runtime packet-size tracking adds entropy_size + packet_size_std_dev as
+additional discriminators for the PCA/RF feature vector.
 """
 
 from __future__ import annotations
@@ -24,7 +26,10 @@ import logging
 import math
 from collections import Counter
 
+import numpy as np
+
 from ddos_sdn.config import load_config
+from ddos_sdn.detector.features import FEATURE_COLS
 from ddos_sdn.detector.telemetry import TelemetryEmitter
 
 try:
@@ -49,10 +54,16 @@ class EntropyAnalyzer:
         """Construct an EntropyAnalyzer.
 
         The optional `pca_detector` and `ml_detector` arguments, when supplied,
-        score each closed window's 8-feature vector and populate the
+        score each closed window's 10-feature vector and populate the
         pca_mahalanobis / rf_proba / verdict_pca / verdict_rf fields in the
-        emitted telemetry record. Phase 3 §3.B / §3.C. When None, those fields
-        stay JSON null per the Phase 1 schema contract.
+        emitted telemetry record. When None, those fields stay JSON null per
+        the Phase 1 schema contract.
+
+        Phase 4a added packet-size tracking: callers passing `packet_size` to
+        collect_statistics() get real `entropy_size` and `packet_size_std_dev`
+        in the feature vector and emitted telemetry; callers not passing it
+        (legacy three-case smoke streams) keep entropy_size=null and
+        std_dev=0.0, preserving backward compatibility.
         """
         cfg = load_config()["detector"]
         self.window: int = window if window is not None else cfg["window_packets"]
@@ -69,6 +80,9 @@ class EntropyAnalyzer:
         self.packet_count: int = 0
         self.dst_ips: list[str] = []
         self.src_ips: list[str] = []
+        self.packet_sizes: list[int] = (
+            []
+        )  # Phase 4a §4a.A — tracks pkt sizes for entropy_size + std_dev
         self._window_start_t: float | None = None
 
         # History of per-window entropy values. Kept across windows so a caller
@@ -88,16 +102,20 @@ class EntropyAnalyzer:
         """The single source of truth for the entropy-only verdict."""
         return self.entropy_value < self.threshold_bits
 
-    def collect_statistics(self, dst_ip, src_ip=None) -> None:
+    def collect_statistics(self, dst_ip, src_ip=None, packet_size: int | None = None) -> None:
         """Record one packet. Triggers window close + telemetry emit on the Nth call.
 
         Args:
             dst_ip: destination IP (any value with a __str__; POX hands us
                     pox.lib.addresses.IPAddr instances, the smoke test hands
                     us plain strings).
-            src_ip: optional source IP. When provided, it feeds top_src in
-                    the emitted telemetry record; when None, top_src is left
-                    as the last-known value or None.
+            src_ip: optional source IP. When provided, feeds top_src + entropy_src
+                    in the emitted telemetry record.
+            packet_size: optional packet size in bytes (Phase 4a §4a.A). When
+                    provided, feeds entropy_size in the telemetry record AND
+                    packet_size_std_dev in the PCA/RF feature vector. When
+                    None, entropy_size stays JSON null and packet_size_std_dev
+                    falls back to 0.0 in the feature vector.
         """
         if self._window_start_t is None:
             self._window_start_t = self.telemetry.now()
@@ -106,6 +124,8 @@ class EntropyAnalyzer:
         self.dst_ips.append(str(dst_ip))
         if src_ip is not None:
             self.src_ips.append(str(src_ip))
+        if packet_size is not None:
+            self.packet_sizes.append(int(packet_size))
 
         if self.packet_count >= self.window:
             self._close_window()
@@ -113,6 +133,7 @@ class EntropyAnalyzer:
     def _close_window(self) -> None:
         dst_counts = Counter(self.dst_ips)
         src_counts: Counter = Counter()
+        size_counts: Counter = Counter()
         entropy = self._shannon_bits(dst_counts, total=self.packet_count)
 
         top_dst = dst_counts.most_common(1)[0][0]
@@ -122,6 +143,15 @@ class EntropyAnalyzer:
             src_counts = Counter(self.src_ips)
             top_src = src_counts.most_common(1)[0][0]
             entropy_src = self._shannon_bits(src_counts, total=len(self.src_ips))
+
+        # Phase 4a §4a.A — packet-size statistics.
+        entropy_size: float | None = None
+        # ddof=0 explicit per features.py docstring — train/inference symmetry guard.
+        packet_size_std_dev: float = 0.0
+        if self.packet_sizes:
+            size_counts = Counter(self.packet_sizes)
+            entropy_size = self._shannon_bits(size_counts, total=len(self.packet_sizes))
+            packet_size_std_dev = float(np.std(self.packet_sizes, ddof=0))
 
         t_now = self.telemetry.now()
         window_seconds = max(t_now - (self._window_start_t or t_now), 1e-3)
@@ -136,16 +166,17 @@ class EntropyAnalyzer:
         self.top_src = top_src
         verdict = "ATTACK" if self.is_attack() else "BENIGN"
 
-        # Phase 3: if PCA / RF detectors are wired in, score this window's
-        # 8-feature vector and surface their verdicts in the telemetry record.
+        # Phase 4a: 10-feature vector consumed by PCA/RF.
         feature_vector = self._feature_vector(
             dst_counts=dst_counts,
             src_counts=src_counts,
             entropy_dst=entropy,
             entropy_src=entropy_src,
+            entropy_size=entropy_size,
             pps=pps,
             top_dst=top_dst,
             top_src=top_src,
+            packet_size_std_dev=packet_size_std_dev,
         )
         pca_mahalanobis: float | None = None
         verdict_pca: str | None = None
@@ -163,7 +194,7 @@ class EntropyAnalyzer:
             window_packets=self.packet_count,
             entropy_dst=entropy,
             entropy_src=entropy_src,  # Phase 3 §3.D.1
-            entropy_size=None,  # Phase 4 §3.10
+            entropy_size=entropy_size,  # Phase 4a §4a.A (was None)
             pps=pps,
             pca_mahalanobis=pca_mahalanobis,  # Phase 3 §3.B
             rf_proba=rf_proba,  # Phase 3 §3.C
@@ -203,36 +234,55 @@ class EntropyAnalyzer:
         src_counts: Counter,
         entropy_dst: float,
         entropy_src: float | None,
+        entropy_size: float | None,
         pps: int,
         top_dst: str,
         top_src: str | None,
+        packet_size_std_dev: float,
     ) -> list[float] | None:
-        """Build the 8-feature vector consumed by PCADetector and MLDetector.
+        """Build the 10-feature vector consumed by PCADetector and MLDetector.
 
-        Returns None if no source IPs are tracked (src_counts empty) — the
-        feature vector requires entropy_src, and a window with no src
-        information can't be scored by Phase 3 detectors. Phase 1/2 callers
-        that don't pass src_ip continue to work; their telemetry records
-        just keep verdict_pca / verdict_rf as null.
+        Feature ordering matches FEATURE_COLS in ddos_sdn.detector.features:
+        [entropy_dst, entropy_src, entropy_size, pps, window_packets,
+         unique_src_count, unique_dst_count,
+         top_dst_frequency, top_src_frequency, packet_size_std_dev]
+
+        Returns None if no source IPs are tracked — the feature vector
+        requires entropy_src, and a window with no src information can't be
+        scored. Phase 1/2 callers that don't pass src_ip continue to work;
+        their telemetry records just keep verdict_pca / verdict_rf as null.
+
+        When packet_size is not tracked (legacy callers), entropy_size falls
+        back to 0.0 in the feature vector slot (the JSON telemetry still
+        emits null for entropy_size — feature vector uses 0.0 because the
+        ML inputs must be numeric; null is a JSON concept not a feature).
         """
         if not src_counts or entropy_src is None or top_src is None:
             return None
         n = float(self.packet_count)
         top_dst_count = dst_counts[top_dst]
         top_src_count = src_counts[top_src]
+        # Order MUST match FEATURE_COLS in features.py.
         return [
             float(entropy_dst),  # entropy_dst
             float(entropy_src),  # entropy_src
+            float(entropy_size) if entropy_size is not None else 0.0,  # entropy_size
             float(pps),  # pps
             n,  # window_packets
             float(len(src_counts)),  # unique_src_count
             float(len(dst_counts)),  # unique_dst_count
             top_dst_count / n,  # top_dst_frequency
             top_src_count / n,  # top_src_frequency
+            float(packet_size_std_dev),  # packet_size_std_dev (ddof=0)
         ]
 
     def reset_stats(self) -> None:
         self.dst_ips = []
         self.src_ips = []
+        self.packet_sizes = []
         self.packet_count = 0
         self._window_start_t = None
+
+
+# Re-export for callers that want to grep for the feature contract from this module.
+__all__ = ["EntropyAnalyzer", "FEATURE_COLS"]

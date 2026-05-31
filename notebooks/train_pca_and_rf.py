@@ -1,19 +1,26 @@
-"""Phase 3 training pipeline — produces models/pca.joblib and models/rf.joblib.
+"""Training pipeline — produces models/pca.joblib and models/rf.joblib.
+
+# Refactored in Phase 4a to extend the per-window feature vector from
+# 8 features to 10 (adding `entropy_size` at index 2 and
+# `packet_size_std_dev` at index 9). The 8-feature version is preserved
+# in git at commit f7d39fb. `git log notebooks/train_pca_and_rf.py`
+# shows the evolution.
 
 This is the source-of-truth Python module that the .ipynb mirrors cell-by-cell.
 Running it directly (`python notebooks/train_pca_and_rf.py`) is equivalent to
 running the notebook end-to-end; the .ipynb exists as a portfolio artifact
 that a reviewer can open in nbviewer.
 
-Pipeline (per Phase 3 §3.F):
+Pipeline (per Phase 3 §3.F, extended in Phase 4a §4a.C):
 
     1. Load samples/cicddos2019_sample.csv. Auto-detects whether the rows
        are pre-windowed (synth fallback path; columns = FEATURE_COLS+Label)
        or raw CICDDoS2019 flow records (primary path; columns include
-       Timestamp, Source IP, Destination IP, Total Fwd Packets, Label).
+       Timestamp, Source IP, Destination IP, Total Fwd Packets,
+       Fwd Packet Length Std, Label).
     2. If primary path: reconstruct per-packet stream, slide 250-packet
-       windows, compute 8-feature vector per window, label by majority.
-       If synth path: skip — rows already are 8-feature windows.
+       windows, compute 10-feature vector per window, label by majority.
+       If synth path: skip — rows already are 10-feature windows.
     3. Stratified 80/20 train/test split, random_state=42.
     4. Fit PCA(n_components=2) on the BENIGN training rows only. Calibrate
        threshold = 99th percentile of Mahalanobis distances over the SAME
@@ -24,6 +31,12 @@ Pipeline (per Phase 3 §3.F):
        confusion matrices.
     7. Save models/pca.joblib and models/rf.joblib.
     8. Print copy-paste-ready F1 block for README §Evaluation.
+
+ddof discipline (Phase 4a): packet_size_std_dev computed via
+numpy.std(arr, ddof=0) explicitly. Matches runtime entropy.py and
+scripts/build_synth_dataset.py; pandas defaults to ddof=1 which would
+break train/inference symmetry. The headline test_pca_flips_random_dst_to_attack
+fails if any path drifts.
 """
 
 from __future__ import annotations
@@ -52,22 +65,18 @@ PCA_PATH = MODELS_DIR / "pca.joblib"
 RF_PATH = MODELS_DIR / "rf.joblib"
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
+from ddos_sdn.detector.features import FEATURE_COLS  # noqa: E402
 from ddos_sdn.detector.ml_detector import MLDetector  # noqa: E402
 from ddos_sdn.detector.pca_detector import PCADetector  # noqa: E402
 
-FEATURE_COLS = (
-    "entropy_dst",
-    "entropy_src",
-    "pps",
-    "window_packets",
-    "unique_src_count",
-    "unique_dst_count",
-    "top_dst_frequency",
-    "top_src_frequency",
-)
 LABEL_COL = "Label"
 WINDOW = 250
 RANDOM_STATE = 42
+
+# CICDDoS2019 column name → our feature contract. Used in cell_2_to_windows
+# for the primary (real-data) path so we read per-flow packet-length stats
+# directly from CIC's columns rather than synthesizing them.
+CIC_PACKET_LEN_STD_COL = "Fwd Packet Length Std"
 
 
 # ----------------------------------------------------------------------
@@ -120,21 +129,43 @@ def cell_2_to_windows(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _features(dsts: list[str], srcs: list[str]) -> dict[str, float]:
+def _features(
+    dsts: list[str],
+    srcs: list[str],
+    sizes: list[int] | None = None,
+) -> dict[str, float]:
+    """Compute the 10-feature row for one window.
+
+    For the synth path (the current Phase 4a default), `sizes` is None and
+    entropy_size / packet_size_std_dev fall back to 0 — but the synth path
+    is pre-windowed, so this helper isn't called there. For the real CIC
+    reconstruction path, sizes can be passed if the caller pulled per-flow
+    `Fwd Packet Length Std` from CICDDoS2019 rows. ddof=0 explicit.
+    """
     n = len(dsts)
     dst_c = Counter(dsts)
     src_c = Counter(srcs)
     top_dst = dst_c.most_common(1)[0][1]
     top_src = src_c.most_common(1)[0][1]
+    if sizes:
+        size_c = Counter(sizes)
+        entropy_size = _shannon(size_c, len(sizes))
+        # ddof=0 explicit — train/inference symmetry guard (see module docstring).
+        packet_size_std_dev = float(np.std(sizes, ddof=0))
+    else:
+        entropy_size = 0.0
+        packet_size_std_dev = 0.0
     return {
         "entropy_dst": _shannon(dst_c, n),
         "entropy_src": _shannon(src_c, n),
+        "entropy_size": entropy_size,
         "pps": 250000.0,
         "window_packets": float(n),
         "unique_src_count": float(len(src_c)),
         "unique_dst_count": float(len(dst_c)),
         "top_dst_frequency": top_dst / n,
         "top_src_frequency": top_src / n,
+        "packet_size_std_dev": packet_size_std_dev,
     }
 
 

@@ -86,7 +86,11 @@ python scripts/build_synth_dataset.py --seed 42
 Deterministic — same seed produces a byte-identical CSV across machines and OSes. The script prints the output sha256 on completion:
 
 ```
+# Phase 3 (8 features, before packet-size landing):
 OUTPUT_SAMPLE_SHA256 = 418d5a9c726f44a40d598ca6c79d9bbf46b6551f9db10f9b3bfa1bdeb0712959
+
+# Phase 4a (10 features — added entropy_size at column 3, packet_size_std_dev at column 10):
+OUTPUT_SAMPLE_SHA256 = 0a6ad54d12fd97a3c68e94d319ec89e461f051042fde159bbcecd2b88217ff70
 ```
 
 **Looking forward:** Phase 4 (or any later refresh) may revisit with real CICDDoS2019 data once the UNB download completes. The migration is a single command: run `scripts/extract_sample.py` against the downloaded full CSV, paste the new `EXPECTED_SOURCE_SHA256` / `EXPECTED_SAMPLE_SHA256` values above, re-run `notebooks/train_pca_and_rf.ipynb`, refresh the `models/*.joblib` artifacts, update the README §Evaluation table. No detector or test code needs to change — the notebook reads whichever `samples/cicddos2019_sample.csv` is on disk.

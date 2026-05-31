@@ -100,7 +100,11 @@ def _replay_pcap(
         if IP not in pkt:
             continue
         packet_index += 1
-        analyzer.collect_statistics(pkt[IP].dst, src_ip=pkt[IP].src)
+        # Phase 4a §4a.A: pass packet size so entropy_size + packet_size_std_dev
+        # are populated in the telemetry record and in the 10-feature vector
+        # PCA/RF score. len(pkt) is the on-the-wire frame length (Ether + IP + UDP
+        # + payload) — the same metric the runtime POX controller would see.
+        analyzer.collect_statistics(pkt[IP].dst, src_ip=pkt[IP].src, packet_size=len(pkt))
 
         # Did the analyzer just close a window? Each new window appends to dst_entropy.
         new_record_count = len(analyzer.dst_entropy)

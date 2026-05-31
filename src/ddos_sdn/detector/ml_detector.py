@@ -43,16 +43,10 @@ from sklearn.ensemble import RandomForestClassifier
 
 from ddos_sdn.config import load_config
 
-FEATURE_COLS = (
-    "entropy_dst",
-    "entropy_src",
-    "pps",
-    "window_packets",
-    "unique_src_count",
-    "unique_dst_count",
-    "top_dst_frequency",
-    "top_src_frequency",
-)
+# Phase 4a §4a.B: single source of truth for the feature ordering.
+# Re-exported here so existing imports `from ddos_sdn.detector.ml_detector
+# import FEATURE_COLS` keep working without changes.
+from ddos_sdn.detector.features import FEATURE_COLS  # noqa: E402
 
 
 class MLDetector:
