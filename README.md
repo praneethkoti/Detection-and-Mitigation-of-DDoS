@@ -31,7 +31,8 @@ The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/PO
 
 ![Dashboard screenshot](docs/screenshots/dashboard.png)
 
-> *Screenshot to be captured locally — `streamlit run dashboard.py` and screenshot the resulting browser tab to `docs/screenshots/dashboard.png`. Until then, the live URL below is the canonical view.*
+<img width="1273" height="649" alt="image" src="https://github.com/user-attachments/assets/fd461d6d-7ebb-4289-b91f-a1f10d548004" />
+
 
 **Live dashboard:** [ddos-sdn-demo.streamlit.app](https://ddos-sdn-demo.streamlit.app) *(URL pending Streamlit Cloud deploy authorization; fallback subdomains in order: `praneeth-ddos-sdn` → `ddos-sdn-detect`. Updated in a follow-up commit once the deploy lands.)*
 
