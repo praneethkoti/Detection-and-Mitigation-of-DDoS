@@ -1,9 +1,17 @@
-# docker-compose for the full SDN stack. Phase 3 §3.K.
+# docker-compose for the full SDN stack. Phase 3 §3.K + Phase 4b §4b.G.
 #
 # Default `docker compose up` brings up two services: pox controller and
 # mininet topology. The dashboard (Grafana) is opt-in via:
 #
 #     docker compose --profile dashboard up
+#
+# The Phase 4b multi-controller stack (coordinator + second worker) is
+# opt-in via:
+#
+#     docker compose --profile distributed up --build
+#
+# The default `docker compose up` is unchanged — no coordinator service,
+# no second worker. The single-controller Phase 3 behavior is preserved.
 #
 # pox runs unprivileged on linux/amd64 and linux/arm64 (Apple Silicon-friendly).
 # mininet requires --privileged + linux/amd64 because Mininet's network
@@ -60,6 +68,52 @@ services:
       - sdn-control
     profiles:
       - dashboard
+
+  # Phase 4b §4b.G — multi-controller East-West coordinator.
+  # Profile-gated: only started when `docker compose --profile distributed up`.
+  coordinator:
+    build:
+      context: .
+      dockerfile: docker/coordinator/Dockerfile
+    container_name: ddos-sdn-coordinator
+    command: ["python", "-m", "ddos_sdn.coordinator.server"]
+    environment:
+      - DDOS_SDN_CONFIG_FILE=/app/config.yaml
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "9876:9876"
+    networks:
+      - sdn-control
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    profiles:
+      - distributed
+
+  # Phase 4b §4b.G — second worker (worker-2). The existing `pox` service
+  # plays the role of worker-1 in the distributed topology; its config.yaml
+  # already lists worker-1 as `this_worker_id`. worker-2 reuses the same
+  # POX image but mounts a config override that flips `this_worker_id`
+  # and changes the OpenFlow port so a second mininet partition can connect.
+  pox-worker-2:
+    build:
+      context: .
+      dockerfile: docker/pox/Dockerfile
+    container_name: ddos-sdn-pox-worker-2
+    command: ["python", "pox.py", "log.level", "--DEBUG", "ddos_sdn.detector.pox_controller"]
+    environment:
+      - DDOS_SDN_CONFIG_FILE=/app/config.worker-2.yaml
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "6634:6633"
+    networks:
+      - sdn-control
+    volumes:
+      - ./config.worker-2.yaml:/app/config.worker-2.yaml:ro
+      - ./models:/app/models:ro
+    depends_on:
+      - coordinator
+    profiles:
+      - distributed
 
 networks:
   sdn-control:

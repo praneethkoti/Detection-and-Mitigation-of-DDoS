@@ -91,3 +91,57 @@ telemetry:
     - verdict_rf        # populated by MLDetector when run (Phase 3 §3.C)
     - top_dst           # real (Phase 1)
     - top_src           # real (Phase 1) — read by the Phase 3 ofp_flow_mod drop rule
+
+# ------------------------------------------------------------------
+# Phase 4b §4.11 — Multi-controller East-West coordination.
+#
+# Default disabled. Existing single-controller deployments (demo.py,
+# docker compose up without a profile) keep the Phase 3 standalone code
+# path verbatim; the section below is only consulted when enabled=true.
+#
+# When enabled, the worker controller embeds a WorkerClient that opens
+# a long-lived TCP connection to the coordinator. Closed-window telemetry
+# records are tee'd to BOTH stdout (preserves existing behavior) AND the
+# coordinator (best-effort, drop-on-disconnect, fail-open). When the
+# coordinator decides that two or more workers report the same top_src
+# within tolerance_window_seconds, it issues a DROP_RULE_COMMAND that
+# the receiving worker installs as an ofp_flow_mod via the Phase 3
+# code path. See §4b.A/B/C/D and tests/test_coordinator_correlation.py.
+# ------------------------------------------------------------------
+coordinator:
+  enabled: false
+  host: "127.0.0.1"
+  port: 9876
+  # Worker → coordinator reconnect cadence. The worker degrades to
+  # standalone Phase 3 mode whenever the socket is down; reconnect
+  # is attempted every reconnect_interval_seconds.
+  reconnect_interval_seconds: 5
+
+  # Correlation policy (coordinator-side).
+  # tolerance_window_seconds is the per-window correlation bucket size:
+  # two WORKER_TELEMETRY messages with the same top_src and
+  # verdict_entropy=ATTACK corroborate iff they land in the same
+  # floor(receive_time / tolerance) bucket OR the immediately previous
+  # bucket (the current+previous lookup pattern, per §4b.B). The
+  # boundary-crossing test
+  # tests/test_coordinator_correlation.py::test_correlation_across_bucket_boundary
+  # locks the regression guard for that pattern.
+  tolerance_window_seconds: 1.0
+  min_corroborating_workers: 2
+
+  # The worker_id this process self-identifies as on its first
+  # WORKER_TELEMETRY. Must match an entry in `workers:` below. Override
+  # this in per-worker config files (see docker/compose §4b.G).
+  this_worker_id: "worker-1"
+
+  # Static topology partitioning. EACH dpid must appear in EXACTLY ONE
+  # worker's partition_dpids list — the coordinator validates at startup
+  # and exits with a clear error if any dpid overlaps. See §4b.B for the
+  # validation logic and
+  # tests/test_coordinator_correlation.py::test_overlapping_partition_dpids_raises
+  # for the regression guard.
+  workers:
+    - worker_id: "worker-1"
+      partition_dpids: [1, 2]
+    - worker_id: "worker-2"
+      partition_dpids: [3, 4]

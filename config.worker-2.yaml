@@ -1,0 +1,30 @@
+# Phase 4b §4b.G — Worker-2 config override.
+#
+# Loaded by the `pox-worker-2` service under docker-compose's `distributed`
+# profile. Same shape as config.yaml but with two coordinator-section
+# overrides so the second worker self-identifies correctly:
+#
+#   - this_worker_id: "worker-2"  (instead of "worker-1")
+#   - host: "coordinator"         (the docker-compose service name)
+#
+# Everything else (detector tuning, controller behavior, telemetry shape)
+# inherits from the same DEFAULTS that drive config.yaml — config.py's
+# deep-merge keeps partial overrides valid.
+#
+# This file is committed (not a secret); workers self-identify on the
+# first WORKER_TELEMETRY and the coordinator's partition_dpids list is
+# authoritative for which dpids belong to which worker.
+
+coordinator:
+  enabled: true
+  host: "coordinator"          # docker-compose service name resolves on sdn-control net
+  port: 9876
+  reconnect_interval_seconds: 5
+  tolerance_window_seconds: 1.0
+  min_corroborating_workers: 2
+  this_worker_id: "worker-2"
+  workers:
+    - worker_id: "worker-1"
+      partition_dpids: [1, 2]
+    - worker_id: "worker-2"
+      partition_dpids: [3, 4]

@@ -60,6 +60,29 @@ DEFAULTS: dict[str, Any] = {
             "top_src",
         ],
     },
+    # Phase 4b §4.11 — Multi-controller East-West coordination.
+    # Defaults to disabled so existing single-controller deployments and
+    # demo.py keep the Phase 3 standalone code path verbatim. When enabled,
+    # the pox_controller wires a CoordinatorTeeSink + WorkerClient onto the
+    # TelemetryEmitter and waits for DROP_RULE_COMMANDs from the coordinator.
+    "coordinator": {
+        "enabled": False,
+        "host": "127.0.0.1",
+        "port": 9876,
+        "reconnect_interval_seconds": 5,
+        "tolerance_window_seconds": 1.0,
+        "min_corroborating_workers": 2,
+        # The worker_id this process self-identifies as on the first
+        # WORKER_TELEMETRY. Must match an entry in `workers:` below.
+        "this_worker_id": "worker-1",
+        # Static topology partition (see §4b.B + §4b.E). EACH dpid must appear
+        # in EXACTLY ONE worker's partition_dpids list — the coordinator
+        # validates on startup and raises ValueError on overlap.
+        "workers": [
+            {"worker_id": "worker-1", "partition_dpids": [1, 2]},
+            {"worker_id": "worker-2", "partition_dpids": [3, 4]},
+        ],
+    },
 }
 
 ENV_VAR = "DDOS_SDN_CONFIG_FILE"

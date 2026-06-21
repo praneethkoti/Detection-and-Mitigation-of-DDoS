@@ -202,3 +202,34 @@ def test_check_ddos_retains_nw_src_after_install() -> None:
     assert (
         entry["nw_src"] == "10.0.0.1"
     ), f"nw_src should be retained for fast re-install after hard_timeout, got {entry['nw_src']!r}"
+
+
+def test_pox_controller_falls_back_to_standalone_when_coordinator_disabled() -> None:
+    """Phase 4b backward-compat guard: coordinator.enabled=false means the
+    controller never opens a TCP connection to a coordinator and never
+    constructs a WorkerClient. The Phase 3 standalone code path is
+    preserved bit-for-bit.
+
+    The default config (built-in DEFAULTS) has coordinator.enabled=false,
+    so the already-imported `ctrl` module loaded under that regime. We
+    assert that the module-level handle was never populated and that the
+    standalone install path still works (single ofp_flow_mod via
+    check_ddos() on the synthetic port_stats entry).
+    """
+    # The standalone path must have left the coordinator handle uninitialized.
+    assert ctrl._coordinator_client is None, (
+        "coordinator.enabled=false must leave _coordinator_client=None — "
+        "no East-West socket should be opened in standalone mode"
+    )
+    assert ctrl._coordinator_enabled is False, (
+        "DEFAULTS must keep coordinator.enabled=false so existing single-controller "
+        "deployments and demo.py keep Phase 3 behavior verbatim"
+    )
+
+    # And the Phase 3 install path still triggers a real flow_mod without
+    # any coordinator involvement.
+    ctrl.port_stats[(1, 3)] = {"count": 60, "nw_src": "10.0.0.1"}
+    ctrl.check_ddos()
+    assert (
+        len(_CAPTURED_MESSAGES) == 1
+    ), f"standalone path must install exactly one drop rule, got {_CAPTURED_MESSAGES}"

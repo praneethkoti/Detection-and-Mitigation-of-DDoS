@@ -88,6 +88,41 @@ The mapping:
 
 Different plane, same job. The two views — wire-and-VLAN at the bottom, controller-and-flow-table in the middle — are complementary network-security skill sets, not separate ones.
 
+## Multi-controller architecture
+
+The SDN flood doesn't just push packets — it targets controller queue depth. One controller is a SPOF, and a flood split across topology partitions can evade single-controller detection by keeping each individual partition's per-window entropy too noisy to threshold. The companion report's Chapter 7 names this gap as future work; **Phase 4b implements it** as an opt-in East-West coordinator.
+
+```
+              ┌────────────────────────────────────────┐
+              │             coordinator                │
+              │   (correlates worker telemetry,        │
+              │    issues DROP_RULE_COMMANDs)          │
+              └─────────┬──────────────────┬───────────┘
+                        │                  │
+              JSON over TCP, line-delimited (port 9876)
+                        │                  │
+                ┌───────┴───────┐   ┌──────┴────────┐
+                │   worker-1    │   │   worker-2    │
+                │  (POX, dpid   │   │  (POX, dpid   │
+                │   1 + 2)      │   │   3 + 4)      │
+                └───────┬───────┘   └──────┬────────┘
+                        │ OpenFlow         │ OpenFlow
+                ┌───────┴───────┐   ┌──────┴────────┐
+                │   Mininet     │   │   Mininet     │
+                │  partition A  │   │  partition B  │
+                └───────────────┘   └───────────────┘
+```
+
+The trigger condition is named explicitly: **when two or more workers report the same `top_src` with `verdict_entropy=ATTACK` within `tolerance_window_seconds` (default 1s), the coordinator issues a `DROP_RULE_COMMAND` to each corroborating worker, and each one installs the same `ofp_flow_mod` against its local switch.** The single-controller `ofp_flow_mod` install path from Phase 3 is unchanged; the multi-controller path is additive. If the coordinator is unreachable, each worker degrades to standalone Phase 3 mode — the network keeps forwarding without distributed correlation.
+
+Run the distributed stack:
+
+```bash
+docker compose --profile distributed up --build
+```
+
+Default `docker compose up` (no profile) is unchanged — single-controller, no coordinator. The full set of coordinator knobs (tolerance window, worker partitions, reconnect cadence) lives under `coordinator:` in [config.yaml](config.yaml); see also [config.worker-2.yaml](config.worker-2.yaml) for the per-worker overrides the second worker container loads. The two regression guards that lock this story are [test_correlation_across_bucket_boundary](tests/test_coordinator_correlation.py) (current+previous bucket lookup catches messages straddling a bucket boundary) and [test_overlapping_partition_dpids_raises](tests/test_coordinator_correlation.py) (coordinator startup refuses a config where two workers claim the same dpid). The [East-West attack surface](THREAT_MODEL.md#east-west-attack-surface-phase-4b) section of the threat model documents what this channel adds to the attack surface and what remains out of scope.
+
 ## Detection methodology
 
 The entropy analyzer maintains a rolling per-window record of destination IPs and computes the Shannon entropy of that distribution every time the window closes. The window size is fixed at **250 packets** (matching the companion report, §5.2) and entropy is computed in **bits** (log₂), the convention in the IDS/IPS and SIGCOMM-era anomaly-detection literature.
@@ -219,7 +254,7 @@ The 5-phase implementation plan is captured in [PROJECT_IMPROVEMENT_PROMPT.md](P
 - **Phase 2 — Make it demoable.** ✅ Sample `.pcap` corpus, `demo.py` single-command interview entry point, `pytest` wiring around the smoke test, `.pcap`-replay integration test (commit `a67efe9`).
 - **Phase 3 — Make it credible.** ✅ Real `ofp_flow_mod` drop rule, PCA + RandomForest detectors with the random_dst flip narrative, `THREAT_MODEL.md`, Docker compose for POX + Mininet + detector, GitHub Actions CI, ruff/black/pre-commit (commit `f7d39fb`).
 - **Phase 4a — Make it shine (observability slice).** ✅ This commit. Runtime packet-size tracking (`entropy_size` + `packet_size_std_dev`), per-window feature vector grown from 8 to 10, retrained PCA + RF, Streamlit dashboard with four panels (entropy time-series + verdict grid + PCA projection + would-install flow_mod table), `streamlit_app.py` + `.streamlit/config.toml` for Community Cloud, FEATURE_COLS consolidated into `src/ddos_sdn/detector/features.py` as single source of truth.
-- **Phase 4b — Multi-controller.** East-West coordination between POX controllers, per the companion report's chapter 7 future work.
+- **Phase 4b — Multi-controller.** ✅ East-West coordinator (JSON-over-TCP) correlates per-window telemetry across two POX workers; two workers reporting the same `top_src` with `verdict_entropy=ATTACK` within `tolerance_window_seconds` trigger a coordinator-issued `DROP_RULE_COMMAND` that each worker installs as an `ofp_flow_mod`. Standalone Phase 3 fallback when the coordinator is unreachable. Opt-in via `coordinator.enabled: true` in [config.yaml](config.yaml) and `docker compose --profile distributed up`. See [Multi-controller architecture](#multi-controller-architecture).
 - **Phase 4c — Cross-class evaluation.** SYN flood, slow-loris, NTP amplification. Cross-attack-class generalization on real CICDDoS2019 once the dataset is staged.
 
 ## Real execution evidence

@@ -294,7 +294,7 @@ def main() -> None:
     st.markdown("### Panel 1 — Per-window entropy")
     st.plotly_chart(
         render_entropy_timeseries(records, config),
-        use_container_width=True,
+        width="stretch",
     )
 
     col1, col2 = st.columns([1, 1])
@@ -302,13 +302,13 @@ def main() -> None:
         st.markdown("### Panel 2 — Three-detector verdicts (last 20 windows)")
         grid = render_verdict_grid(records, config)
         styled = grid.style.map(_style_verdict, subset=["entropy", "PCA", "RF"])
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+        st.dataframe(styled, width="stretch", hide_index=True)
 
     with col2:
         st.markdown("### Panel 3 — PCA projection")
         fig = render_pca_scatter(records, config)
         if fig is not None:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("PCA artifact not loaded; scatter unavailable.")
 
@@ -317,7 +317,7 @@ def main() -> None:
     if flow_mods.empty:
         st.info("No ATTACK windows detected — nothing to install.")
     else:
-        st.dataframe(flow_mods, use_container_width=True, hide_index=True)
+        st.dataframe(flow_mods, width="stretch", hide_index=True)
 
     st.success(
         f"Replay finished — {len(records)} windows processed. "
