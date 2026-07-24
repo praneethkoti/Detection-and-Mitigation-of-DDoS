@@ -27,8 +27,7 @@ Streamlit Community Cloud constraints (per plan §4a.G):
       file reads only world-readable files in the repo (samples/*.pcap,
       models/*.joblib, config.yaml).
     - First load on a sleeping app takes 30-60s. st.spinner() makes that
-      visible; docs/screenshots/dashboard.png in the README is the
-      cold-start failsafe.
+      visible.
 """
 
 from __future__ import annotations

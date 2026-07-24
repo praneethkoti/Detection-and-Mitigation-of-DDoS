@@ -17,7 +17,11 @@ pytest>=8.0
 
 # CICDDoS2019 sample extraction (Phase 2 — scripts/extract_sample.py)
 numpy>=1.26
-pandas>=2.2
+# Pinned (Phase 4c §4c.Y): pandas 3.x carries breaking DataFrame API changes.
+# 2.3.3 is the version scripts/build_synth_dataset.py and the training notebook
+# are tested against; a floor would let a fresh CI install pull 3.x and turn CI
+# red for reasons unrelated to the work in flight.
+pandas==2.3.3
 
 # ML stack (Phase 3 — consumed by notebooks/train_pca_and_rf.py, PCADetector,
 # MLDetector). The exact versions below are the versions used to produce the

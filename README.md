@@ -34,7 +34,7 @@ The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/PO
 <img width="1273" height="649" alt="image" src="https://github.com/user-attachments/assets/fd461d6d-7ebb-4289-b91f-a1f10d548004" />
 
 
-**Live dashboard:** [ddos-sdn-demo.streamlit.app](https://ddos-sdn-demo.streamlit.app) *(URL pending Streamlit Cloud deploy authorization; fallback subdomains in order: `praneeth-ddos-sdn` → `ddos-sdn-detect`. Updated in a follow-up commit once the deploy lands.)*
+**Live dashboard:** [ddos-sdn-demo.streamlit.app](https://ddos-sdn-demo.streamlit.app)
 
 ```bash
 streamlit run dashboard.py
@@ -42,7 +42,7 @@ streamlit run dashboard.py
 
 Four stacked panels — per-window entropy time-series (`entropy_dst`, `entropy_src`, `entropy_size` with the 1.66-bit threshold line drawn), three-detector verdict grid (entropy / PCA / RF traffic-lights for the last 20 windows), 2D PCA projection scatter colored by `verdict_pca`, and the would-install `ofp_flow_mod` drop-rule table. The default mode replays `samples/normal.pcap` then `samples/attack.pcap` window-by-window with a 100 ms tick so a reviewer watches the entropy lines collapse on the attack windows. The replay takes about five seconds; `--mode tail` switches to reading `$telemetry_path` from `config.yaml` for production observability.
 
-The Streamlit Community Cloud deploy reads only world-readable committed files (`samples/*.pcap`, `models/*.joblib`, `config.yaml`) — no secrets, no environment variables. Cold-start latency on Community Cloud is 30–60 seconds for a sleeping app; if the URL above is slow to respond, the static screenshot above is the failsafe view.
+The Streamlit Community Cloud deploy reads only world-readable committed files (`samples/*.pcap`, `models/*.joblib`, `config.yaml`) — no secrets, no environment variables. First load on a sleeping Community Cloud app can take 30–60 seconds; subsequent loads are instant.
 
 ## Overview
 
