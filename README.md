@@ -29,7 +29,7 @@ The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/PO
 
 ## Dashboard
 
-![Dashboard screenshot](docs/screenshots/dashboard.png)
+
 
 <img width="1273" height="649" alt="image" src="https://github.com/user-attachments/assets/fd461d6d-7ebb-4289-b91f-a1f10d548004" />
 
