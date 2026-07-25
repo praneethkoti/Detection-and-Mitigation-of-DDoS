@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/praneethkoti/Detection-and-Mitigation-of-DDoS/actions/workflows/ci.yml/badge.svg)](https://github.com/praneethkoti/Detection-and-Mitigation-of-DDoS/actions/workflows/ci.yml)
 
+**Live dashboard:** https://ddos-sdn-demo.streamlit.app
+
 *Programmable network defense on a POX/OpenFlow control plane: streaming Shannon entropy of destination IPs identifies volumetric L3/L4 floods at the controller, and the controller installs flow-table mitigation on the affected switch port.*
 
 *K. Sai Praneeth and A. Meher Sudhakar, SRM Institute of Science and Technology, November 2021. Academic background: [docs/SDN_DDoS_Report.pdf](docs/SDN_DDoS_Report.pdf).*
@@ -33,9 +35,6 @@ The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/PO
 ![DDoS SDN dashboard, UDP flood replay](docs/screenshots/dashboard_udp_flood.png)
 
 *Default view: UDP flood replay. `entropy_dst` and `entropy_src` both collapse to zero at window 2, all three detectors flag ATTACK, and RF classifies the window as `UDP_FLOOD`. Screenshot is committed under `docs/screenshots/` rather than hotlinked, so it survives independently of any CDN.*
-
-
-**Live dashboard:** [ddos-sdn-demo.streamlit.app](https://ddos-sdn-demo.streamlit.app)
 
 ```bash
 streamlit run dashboard.py
