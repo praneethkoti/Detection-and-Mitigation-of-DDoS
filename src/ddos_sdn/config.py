@@ -60,7 +60,7 @@ DEFAULTS: dict[str, Any] = {
             "top_src",
         ],
     },
-    # Phase 4b §4.11 — Multi-controller East-West coordination.
+    # Phase 4b §4.11: Multi-controller East-West coordination.
     # Defaults to disabled so existing single-controller deployments and
     # demo.py keep the Phase 3 standalone code path verbatim. When enabled,
     # the pox_controller wires a CoordinatorTeeSink + WorkerClient onto the
@@ -76,7 +76,7 @@ DEFAULTS: dict[str, Any] = {
         # WORKER_TELEMETRY. Must match an entry in `workers:` below.
         "this_worker_id": "worker-1",
         # Static topology partition (see §4b.B + §4b.E). EACH dpid must appear
-        # in EXACTLY ONE worker's partition_dpids list — the coordinator
+        # in EXACTLY ONE worker's partition_dpids list. The coordinator
         # validates on startup and raises ValueError on overlap.
         "workers": [
             {"worker_id": "worker-1", "partition_dpids": [1, 2]},

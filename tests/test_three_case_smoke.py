@@ -4,16 +4,16 @@ Drives EntropyAnalyzer directly with synthesized destination/source IP streams
 that match each of the three traffic regimes the companion report's chapter 6
 enumerates:
 
-    Case 1  benign baseline           — uniform 10.0.0.[2..64]      -> BENIGN
-    Case 2  single-target flood       — all 10.0.0.64                -> ATTACK
-    Case 3  random-destination flood  — one src, uniform dst range   -> BENIGN (entropy fails here)
+    Case 1  benign baseline             uniform 10.0.0.[2..64]      -> BENIGN
+    Case 2  single-target flood         all 10.0.0.64                -> ATTACK
+    Case 3  random-destination flood    one src, uniform dst range   -> BENIGN (entropy fails here)
 
-Case 3 is the case the report calls the "new-type DDoS" — destination-IP
+Case 3 is the case the report calls the "new-type DDoS": destination-IP
 entropy stays high, so the entropy-only detector reports BENIGN. That failure
 mode is asserted explicitly so the Phase 3 PCA detector has a concrete number
 to beat. The README and the commit body both reference these baseline numbers.
 
-The 13-field telemetry schema is also exercised — every emitted JSON line is
+The 13-field telemetry schema is also exercised: every emitted JSON line is
 parsed and every key from TelemetryEmitter.FIELDS is asserted present. Phase 1
 populates 7 fields with real values; the other 6 are JSON null.
 
@@ -153,7 +153,7 @@ def run_case_random_dst(rng: random.Random) -> CaseResult:
         attack_windows=attack_windows,
         entropy_dst_min=entropy_min,
         verdict_match=verdict_match,
-        note="expected: entropy fails to detect — Phase 3 PCA addresses this",
+        note="expected: entropy fails to detect; Phase 3 PCA addresses this",
     )
 
 
@@ -175,7 +175,7 @@ def test_single_target_flood_is_recognized_as_attack() -> None:
 
 
 def test_random_dst_flood_is_known_failure_of_entropy_only_detector() -> None:
-    # verdict_match==True here means "entropy reports BENIGN as expected" —
+    # verdict_match==True here means "entropy reports BENIGN as expected":
     # the case the report's chapter 6 calls out and Phase 3's PCA detector
     # will be the one to flip from BENIGN to ATTACK.
     assert run_case_random_dst(random.Random(42)).verdict_match

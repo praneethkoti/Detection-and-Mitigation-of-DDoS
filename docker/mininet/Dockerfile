@@ -1,11 +1,11 @@
-# Mininet topology image — runs the project's reference tree topology
+# Mininet topology image: runs the project's reference tree topology
 # (9 switches, 64 hosts) and points it at the pox container.
 #
-# Multi-arch: amd64 only — Mininet's kernel-namespace dependencies do not
+# Multi-arch: amd64 only. Mininet's kernel-namespace dependencies do not
 # work cleanly on linux/arm64 hosts. (Apple Silicon reviewers can run pox +
 # the detector standalone; full mininet topology requires linux/amd64.)
 #
-# Phase 3 §3.K. Privileged container — see docker-compose.yml.
+# Phase 3 §3.K. Privileged container; see docker-compose.yml.
 
 FROM ubuntu:22.04
 

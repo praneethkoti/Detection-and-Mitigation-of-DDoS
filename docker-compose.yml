@@ -10,7 +10,7 @@
 #
 #     docker compose --profile distributed up --build
 #
-# The default `docker compose up` is unchanged — no coordinator service,
+# The default `docker compose up` is unchanged: no coordinator service,
 # no second worker. The single-controller Phase 3 behavior is preserved.
 #
 # pox runs unprivileged on linux/amd64 and linux/arm64 (Apple Silicon-friendly).
@@ -69,7 +69,7 @@ services:
     profiles:
       - dashboard
 
-  # Phase 4b §4b.G — multi-controller East-West coordinator.
+  # Phase 4b §4b.G: multi-controller East-West coordinator.
   # Profile-gated: only started when `docker compose --profile distributed up`.
   coordinator:
     build:
@@ -89,7 +89,7 @@ services:
     profiles:
       - distributed
 
-  # Phase 4b §4b.G — second worker (worker-2). The existing `pox` service
+  # Phase 4b §4b.G: second worker (worker-2). The existing `pox` service
   # plays the role of worker-1 in the distributed topology; its config.yaml
   # already lists worker-1 as `this_worker_id`. worker-2 reuses the same
   # POX image but mounts a config override that flips `this_worker_id`

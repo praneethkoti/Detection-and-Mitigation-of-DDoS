@@ -15,7 +15,7 @@ PyYAML>=6.0
 # Test runner (Phase 2)
 pytest>=8.0
 
-# CICDDoS2019 sample extraction (Phase 2 — scripts/extract_sample.py)
+# CICDDoS2019 sample extraction (Phase 2 - scripts/extract_sample.py)
 numpy>=1.26
 # Pinned (Phase 4c §4c.Y): pandas 3.x carries breaking DataFrame API changes.
 # 2.3.3 is the version scripts/build_synth_dataset.py and the training notebook
@@ -23,7 +23,7 @@ numpy>=1.26
 # red for reasons unrelated to the work in flight.
 pandas==2.3.3
 
-# ML stack (Phase 3 — consumed by notebooks/train_pca_and_rf.py, PCADetector,
+# ML stack (Phase 3 - consumed by notebooks/train_pca_and_rf.py, PCADetector,
 # MLDetector). The exact versions below are the versions used to produce the
 # committed models/*.joblib artifacts; reloading them on a different minor
 # scikit-learn version may emit InconsistentVersionWarning but unpickling
@@ -32,7 +32,7 @@ pandas==2.3.3
 scikit-learn==1.8.0
 joblib==1.5.3
 
-# Streamlit dashboard (Phase 4a — consumed by dashboard.py and the
+# Streamlit dashboard (Phase 4a - consumed by dashboard.py and the
 # Streamlit Community Cloud deploy via streamlit_app.py).
 streamlit>=1.40
 plotly>=5.20

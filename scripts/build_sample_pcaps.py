@@ -2,10 +2,10 @@
 
 Generates two PCAP files under samples/:
 
-    samples/normal.pcap   — 750-packet benign baseline (>= 3 closed windows of 250)
-    samples/attack.pcap   — 1000 packets: 250 benign, then 750 single-target flood
+    samples/normal.pcap     750-packet benign baseline (>= 3 closed windows of 250)
+    samples/attack.pcap     1000 packets: 250 benign, then 750 single-target flood
                             (the flood starts at packet #251 so the second window
-                             closes at packet #500 with verdict ATTACK — this is the
+                             closes at packet #500 with verdict ATTACK. This is the
                              structural reason demo.py's [PASS] line claims detection
                              within the first 500 packets of attack.pcap)
 
@@ -42,7 +42,7 @@ SAMPLES_DIR = REPO_ROOT / "samples"
 # Constants chosen to match tests/test_three_case_smoke.py exactly.
 BENIGN_RANGE = range(2, 65)  # 10.0.0.[2..64]
 SINGLE_TARGET = "10.0.0.64"  # flood destination
-ATTACKER_SRC = "10.0.0.1"  # flood source — read by Phase 3's ofp_flow_mod(nw_src=...)
+ATTACKER_SRC = "10.0.0.1"  # flood source, read by Phase 3's ofp_flow_mod(nw_src=...)
 
 NORMAL_PCAP_PACKETS = 750
 ATTACK_PCAP_PACKETS = 1000
@@ -52,7 +52,7 @@ DPORT = 80
 SPORT = 2
 PAYLOAD_BYTES = 982  # gives ~1024-byte frames (982 + 42 = Ether/IP/UDP overhead)
 
-INTER_PACKET_MS = 1.0  # 1 ms monotonic spacing — see module docstring
+INTER_PACKET_MS = 1.0  # 1 ms monotonic spacing, see module docstring
 
 # Deterministic placeholder MACs. Using real / resolved MACs makes scapy do live
 # ARP lookups during Ether() construction, which is enormously slow on Windows.
@@ -62,7 +62,7 @@ DST_MAC = "02:00:00:00:00:02"
 
 
 def _benign_src(rng: random.Random) -> str:
-    """Random TEST-NET-3 (203.0.113.0/24) source — non-RFC-1918, deterministic via rng."""
+    """Random TEST-NET-3 (203.0.113.0/24) source, non-RFC-1918, deterministic via rng."""
     return f"203.0.113.{rng.randint(1, 254)}"
 
 
@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         "--payload-bytes",
         type=int,
         default=PAYLOAD_BYTES,
-        help=f"UDP payload size in bytes (default: {PAYLOAD_BYTES} — total frame ≈ 1024 B)",
+        help=f"UDP payload size in bytes (default: {PAYLOAD_BYTES}, total frame ≈ 1024 B)",
     )
     parser.add_argument(
         "--out-dir",

@@ -19,10 +19,10 @@ def resolve_interface(preferred: str | None = None) -> str | None:
 
     Preference order:
         1. The explicit ``preferred`` argument if it names an existing interface
-           on this host. (Even loopback is honored here — if the caller asked
+           on this host. (Even loopback is honored here: if the caller asked
            for it, they get it.)
         2. The first interface that has at least one non-loopback IPv4 address.
-        3. ``None`` — scapy will fall back to ``conf.iface``.
+        3. ``None``: scapy will fall back to ``conf.iface``.
     """
     interfaces = psutil.net_if_addrs()
 

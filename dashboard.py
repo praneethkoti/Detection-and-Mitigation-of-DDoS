@@ -7,7 +7,7 @@ Single command:
 Default mode is `--replay`: the dashboard reads samples/normal.pcap and
 samples/attack.pcap from disk, drives them through EntropyAnalyzer (with
 PCA + RF wired in), and animates the per-window verdicts window-by-window
-with a 100 ms sleep between windows. The full replay takes ~5 seconds —
+with a 100 ms sleep between windows. The full replay takes ~5 seconds,
 the reviewer watches the entropy_dst line collapse on the attack windows
 and the verdict cells in the grid flip from green to red as the flood lands.
 
@@ -60,6 +60,12 @@ WINDOW_TICK_SECONDS = 0.1
 # Last-N rows in the verdict grid.
 VERDICT_GRID_ROWS = 20
 
+# Placeholder shown wherever a detector reported no verdict (JSON null), i.e.
+# the corresponding .joblib was not loaded. This is rendered UI data, not
+# prose: it fills verdict-grid cells and doubles as the plotly legend key in
+# render_pca_scatter, so the two must stay in sync. ASCII per Phase 4c §4c.X.
+NO_VERDICT = "n/a"
+
 
 # ---------------------------------------------------------------------------
 # Detector loading
@@ -76,7 +82,7 @@ def _load_pca_ml() -> tuple[Any, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Replay helper — the analyzer-replay code path the dashboard wraps.
+# Replay helper: the analyzer-replay code path the dashboard wraps.
 # Called from the smoke test too, so its contract is locked.
 # ---------------------------------------------------------------------------
 def replay_pcap_to_records(
@@ -107,7 +113,7 @@ def replay_pcap_to_records(
 
 
 # ---------------------------------------------------------------------------
-# Panel renderers — one function per panel, each takes (records, config).
+# Panel renderers: one function per panel, each takes (records, config).
 # Smoke test asserts these names exist; test_dashboard.py imports them.
 # ---------------------------------------------------------------------------
 def render_entropy_timeseries(records: list[dict], config: dict) -> go.Figure:
@@ -170,9 +176,9 @@ def render_verdict_grid(records: list[dict], config: dict) -> pd.DataFrame:
         rows.append(
             {
                 "window": i,
-                "entropy": r.get("verdict_entropy") or "—",
-                "PCA": r.get("verdict_pca") or "—",
-                "RF": r.get("verdict_rf") or "—",
+                "entropy": r.get("verdict_entropy") or NO_VERDICT,
+                "PCA": r.get("verdict_pca") or NO_VERDICT,
+                "RF": r.get("verdict_rf") or NO_VERDICT,
             }
         )
     return pd.DataFrame(rows)
@@ -198,13 +204,13 @@ def render_pca_scatter(records: list[dict], config: dict) -> go.Figure | None:
     df["x"] = df["entropy_dst"]
     df["y"] = df["entropy_src"]
     df["window"] = range(1, len(df) + 1)
-    df["verdict"] = df["verdict_pca"].fillna("—")
+    df["verdict"] = df["verdict_pca"].fillna(NO_VERDICT)
     fig = px.scatter(
         df,
         x="x",
         y="y",
         color="verdict",
-        color_discrete_map={"BENIGN": "#2ca02c", "ATTACK": "#d62728", "—": "#888888"},
+        color_discrete_map={"BENIGN": "#2ca02c", "ATTACK": "#d62728", NO_VERDICT: "#888888"},
         hover_data=["window", "entropy_dst", "entropy_src", "entropy_size", "pca_mahalanobis"],
     )
     fig.update_layout(
@@ -245,7 +251,7 @@ def render_flow_mod_table(records: list[dict], config: dict) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 def main() -> None:
     st.set_page_config(
-        page_title="DDoS detection on SDN — live dashboard",
+        page_title="DDoS detection on SDN: live dashboard",
         page_icon="🛡️",
         layout="wide",
     )
@@ -290,7 +296,7 @@ def main() -> None:
     # at the time-compressed loop above; Streamlit's reactive model handles
     # the rest. (For a true per-window animation we'd use st.empty() +
     # progressive updates inside the loop; that's available as a refinement.)
-    st.markdown("### Panel 1 — Per-window entropy")
+    st.markdown("### Panel 1: Per-window entropy")
     st.plotly_chart(
         render_entropy_timeseries(records, config),
         width="stretch",
@@ -298,28 +304,28 @@ def main() -> None:
 
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.markdown("### Panel 2 — Three-detector verdicts (last 20 windows)")
+        st.markdown("### Panel 2: Three-detector verdicts (last 20 windows)")
         grid = render_verdict_grid(records, config)
         styled = grid.style.map(_style_verdict, subset=["entropy", "PCA", "RF"])
         st.dataframe(styled, width="stretch", hide_index=True)
 
     with col2:
-        st.markdown("### Panel 3 — PCA projection")
+        st.markdown("### Panel 3: PCA projection")
         fig = render_pca_scatter(records, config)
         if fig is not None:
             st.plotly_chart(fig, width="stretch")
         else:
             st.info("PCA artifact not loaded; scatter unavailable.")
 
-    st.markdown("### Panel 4 — Would-install ofp_flow_mod drop rules")
+    st.markdown("### Panel 4: Would-install ofp_flow_mod drop rules")
     flow_mods = render_flow_mod_table(records, config)
     if flow_mods.empty:
-        st.info("No ATTACK windows detected — nothing to install.")
+        st.info("No ATTACK windows detected; nothing to install.")
     else:
         st.dataframe(flow_mods, width="stretch", hide_index=True)
 
     st.success(
-        f"Replay finished — {len(records)} windows processed. "
+        f"Replay finished: {len(records)} windows processed. "
         f"Hit ▶ Replay again above to re-run."
     )
 

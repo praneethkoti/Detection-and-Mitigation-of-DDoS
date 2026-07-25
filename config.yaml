@@ -1,4 +1,4 @@
-# ddos_sdn — runtime configuration
+# ddos_sdn: runtime configuration
 #
 # This file holds every tunable threshold for the detector and controller.
 # Override location is resolved in this order:
@@ -17,7 +17,7 @@ detector:
   window_packets: 250
 
   # Attack threshold expressed in bits (log base 2).
-  # The original report used log10 with threshold 0.5 — converted to log2 that's ~1.66.
+  # The original report used log10 with threshold 0.5; converted to log2 that's ~1.66.
   # For a uniform window of 250 distinct destinations entropy is log2(250) ≈ 7.97;
   # for a single-target flood entropy is exactly 0.0.
   entropy_threshold_bits: 1.66
@@ -30,7 +30,7 @@ detector:
   # mitigation rules. Seconds.
   timer_interval_seconds: 2
 
-  # Phase 3 §3.B — unsupervised PCA-based anomaly detector.
+  # Phase 3 §3.B: unsupervised PCA-based anomaly detector.
   pca:
     # Trained model artifact produced by notebooks/train_pca_and_rf.ipynb.
     # Relative to the repo root; resolved at PCADetector.__init__ time.
@@ -42,7 +42,7 @@ detector:
     # so a reviewer can grep the calibration choice without opening the notebook.
     benign_distance_percentile: 99
 
-  # Phase 3 §3.C — supervised RandomForest classifier.
+  # Phase 3 §3.C: supervised RandomForest classifier.
   rf:
     model_path: "models/rf.joblib"
     # P(attack) >= proba_threshold means verdict_rf == "ATTACK". Sklearn's
@@ -56,7 +56,7 @@ controller:
   # How long an ARP cache entry is considered valid. Seconds.
   arp_entry_timeout_seconds: 120
 
-  # Phase 3 §3.A — wall-clock lifetime of the installed ofp_flow_mod drop rule.
+  # Phase 3 §3.A: wall-clock lifetime of the installed ofp_flow_mod drop rule.
   # After this many seconds the rule expires and the controller resumes
   # processing PACKET_INs for the source it had been dropping. The retained
   # nw_src in port_stats means a returning attacker re-trips the threshold
@@ -81,7 +81,7 @@ telemetry:
     - t                 # real (Phase 1)
     - window_packets    # real (Phase 1)
     - entropy_dst       # real (Phase 1)
-    - entropy_src       # real (Phase 3 §3.D.1) — Shannon entropy of src IPs
+    - entropy_src       # real (Phase 3 §3.D.1): Shannon entropy of src IPs
     - entropy_size      # null until Phase 4 §3.10 (packet-size tracking)
     - pps               # real (Phase 1)
     - pca_mahalanobis   # populated by PCADetector when run (Phase 3 §3.B)
@@ -90,10 +90,10 @@ telemetry:
     - verdict_pca       # populated by PCADetector when run (Phase 3 §3.B)
     - verdict_rf        # populated by MLDetector when run (Phase 3 §3.C)
     - top_dst           # real (Phase 1)
-    - top_src           # real (Phase 1) — read by the Phase 3 ofp_flow_mod drop rule
+    - top_src           # real (Phase 1): read by the Phase 3 ofp_flow_mod drop rule
 
 # ------------------------------------------------------------------
-# Phase 4b §4.11 — Multi-controller East-West coordination.
+# Phase 4b §4.11: Multi-controller East-West coordination.
 #
 # Default disabled. Existing single-controller deployments (demo.py,
 # docker compose up without a profile) keep the Phase 3 standalone code
@@ -135,7 +135,7 @@ coordinator:
   this_worker_id: "worker-1"
 
   # Static topology partitioning. EACH dpid must appear in EXACTLY ONE
-  # worker's partition_dpids list — the coordinator validates at startup
+  # worker's partition_dpids list; the coordinator validates at startup
   # and exits with a clear error if any dpid overlaps. See §4b.B for the
   # validation logic and
   # tests/test_coordinator_correlation.py::test_overlapping_partition_dpids_raises

@@ -13,7 +13,7 @@ affected switch port.
 ## Why this matters
 
 The SDN control plane is itself a target. A volumetric flood toward a single
-victim does not only stress the victim — it exhausts the controller, because
+victim does not only stress the victim; it exhausts the controller, because
 every new `[srcip, dstip]` pair triggers a `PACKET_IN`. When the controller
 falls behind, every flow in the network falls behind with it. Detecting and
 acting on flood signatures *at the controller* is the only place where a
@@ -26,7 +26,7 @@ A streaming entropy analyzer closes one window every 250 packets and computes
 Shannon entropy (in bits) of the destination-IP distribution within that
 window. Under benign traffic, entropy approaches `log₂(window) ≈ 7.97`;
 under a single-target flood, entropy collapses toward `0`. The controller
-treats the window-level entropy as a single boolean signal — *under* the
+treats the window-level entropy as a single boolean signal, *under* the
 configured threshold means the controller increments per-port packet
 counters, and a periodic timer evaluates those counters and dispatches
 mitigation. Every closed window also emits a structured JSON telemetry line
@@ -34,7 +34,7 @@ on stdout, which downstream tools (a CI smoke test, an optional dashboard)
 consume without coupling to POX.
 
 The detector deliberately does not catch the case where a single source
-targets randomized destinations across the same subnet — destination
+targets randomized destinations across the same subnet, so destination
 entropy stays high in that regime. PCA over standardized per-window flow
 features and a RandomForest classifier are on the roadmap to close that
 gap.
@@ -43,4 +43,4 @@ gap.
 
 - [Repository on GitHub](https://github.com/praneethkoti/Detection-and-Mitigation-of-DDoS)
 - [Companion academic report (PDF)](SDN_DDoS_Report.pdf)
-- [Project improvement prompt — senior-engineer review notes](../PROJECT_IMPROVEMENT_PROMPT.md)
+- [Project improvement prompt: senior-engineer review notes](../PROJECT_IMPROVEMENT_PROMPT.md)

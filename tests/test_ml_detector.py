@@ -1,6 +1,6 @@
 """Unit tests for MLDetector (Phase 3 §3.J, extended in Phase 4a to 10 features).
 
-Parallel structure to test_pca_detector.py — three behavioral assertions on
+Parallel structure to test_pca_detector.py: three behavioral assertions on
 the trained RandomForestClassifier, including the headline random_dst flip.
 """
 
@@ -39,7 +39,14 @@ assert FEATURE_COLS == (
 
 def test_rf_recognizes_benign_baseline() -> None:
     rf = _detector()
-    feature_vector = [5.83, 7.11, 2.5, 250000.0, 250.0, 156.0, 63.0, 0.036, 0.020, 440.0]
+    # The median benign window from scripts/build_synth_dataset.py at --seed 42.
+    # The pre-§4c.A-redo value here ([5.83, 7.11, 2.5, 250000, 250, 156, 63,
+    # 0.036, 0.020, 440]) was an idealized "every host, every source, full rate"
+    # window that the widened generator no longer produces: it sits outside the
+    # benign range on entropy_dst, unique_src_count, unique_dst_count and
+    # top_dst_frequency simultaneously. Asserting a model's verdict on a point
+    # outside its training distribution tests extrapolation, not recognition.
+    feature_vector = [4.887, 6.392, 1.934, 63750.0, 250.0, 114.0, 32.0, 0.056, 0.024, 490.2]
     assert (
         rf.verdict(feature_vector) == "BENIGN"
     ), f"benign signature misclassified ATTACK: proba(ATTACK)={rf.proba(feature_vector):.4f}"

@@ -1,4 +1,4 @@
-"""ddos_sdn — entropy-based DDoS detection and mitigation for SDN data planes.
+"""ddos_sdn: entropy-based DDoS detection and mitigation for SDN data planes.
 
 Subpackages:
     detector    EntropyAnalyzer and the POX learning-switch controller.

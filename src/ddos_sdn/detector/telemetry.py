@@ -1,4 +1,4 @@
-"""JSON-line telemetry emitter — the project's external contract.
+"""JSON-line telemetry emitter: the project's external contract.
 
 One closed entropy window  ->  one JSON line on the configured sink.
 Every downstream consumer (demo.py, dashboard.py, CI smoke tests, jq pipelines)
@@ -73,7 +73,7 @@ class TelemetryEmitter:
         """Write one JSON line. Returns the dict that was written.
 
         Missing fields are auto-filled with ``None``. Fields outside the
-        13-field schema are rejected — appending new fields requires editing
+        13-field schema are rejected. Appending new fields requires editing
         ``FIELDS`` in this module so that the contract stays grep-able.
         """
         unknown = set(fields) - set(self.FIELDS)

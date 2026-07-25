@@ -12,11 +12,11 @@ in dashboard.py and is unchanged across the two entry paths
 # committed files (samples/*.pcap, models/*.joblib, config.yaml). No
 # os.getenv() calls. No streamlit.secrets usage. The `--mode tail` path
 # would read $telemetry_path from config, but that path is `-` (stdout)
-# by default — Cloud users hit the replay path, never tail.
+# by default: Cloud users hit the replay path, never tail.
 #
 # If you ever add a feature that needs a secret (private dataset URL,
 # API token), do it via streamlit.secrets with the secret values
-# configured in the Cloud UI — NOT in this repo.
+# configured in the Cloud UI, NOT in this repo.
 """
 
 import dashboard

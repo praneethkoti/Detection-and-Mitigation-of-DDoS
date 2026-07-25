@@ -17,7 +17,7 @@ Evolution:
         Added entropy_size (3rd) and packet_size_std_dev (10th).
 
 ddof discipline: packet_size_std_dev is computed via numpy.std(arr, ddof=0)
-at every call site — never via pandas.DataFrame.std() (which defaults to
+at every call site, never via pandas.DataFrame.std() (which defaults to
 ddof=1) or sklearn helpers that vary. Train/inference symmetry depends on
 this; if any call site drifts to ddof=1, PCA's learned variance mismatches
 runtime emission and the headline test_pca_flips_random_dst_to_attack fails.

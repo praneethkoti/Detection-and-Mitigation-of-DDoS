@@ -103,7 +103,7 @@ python -m ddos_sdn.generators.random_dst_flood --source-ip 10.0.0.1 -s 2 -e 64 -
 
 Capture: the POX terminal showing JSON-line emissions where
 `entropy_dst` stays high (above the 1.66-bit threshold) and the verdict
-remains BENIGN — demonstrating that destination-IP entropy *fails to
+remains BENIGN, demonstrating that destination-IP entropy *fails to
 detect* this attack. This is the case the roadmap's PCA + RandomForest
 detectors will catch.
 
@@ -130,7 +130,7 @@ fires:
 sudo ovs-ofctl dump-flows s1
 ```
 
-Capture: the flow table — should show only the default learning-switch
+Capture: the flow table, which should show only the default learning-switch
 rules, no drop rules.
 
 ---

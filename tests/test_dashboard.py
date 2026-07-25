@@ -1,4 +1,4 @@
-"""Phase 4a §4a.E — module-smoke tests for dashboard.py.
+"""Phase 4a §4a.E: module-smoke tests for dashboard.py.
 
 These do NOT spin up a Streamlit server. The Streamlit reactive runtime is
 heavy and CI doesn't need it. Instead the contract between the dashboard
@@ -8,7 +8,7 @@ and the rest of the project is what we lock:
      of main() under pytest).
   2. The four named panel render functions exist and are callable.
   3. replay_pcap_to_records produces 13-field telemetry records matching
-     TelemetryEmitter.FIELDS — the cross-phase schema contract.
+     TelemetryEmitter.FIELDS, the cross-phase schema contract.
 """
 
 from __future__ import annotations

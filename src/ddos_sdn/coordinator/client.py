@@ -1,4 +1,4 @@
-"""Phase 4b §4b.C — Worker-side TCP client + CoordinatorTeeSink.
+"""Phase 4b §4b.C: Worker-side TCP client + CoordinatorTeeSink.
 
 The worker side of the East-West channel. Two collaborating classes:
 
@@ -12,7 +12,7 @@ The worker side of the East-West channel. Two collaborating classes:
     CoordinatorTeeSink  File-like wrapper (write/flush) that satisfies the
                         TelemetryEmitter sink interface. write() routes
                         each JSON line to BOTH the underlying stdout sink
-                        AND, in parallel, the WorkerClient — so existing
+                        AND, in parallel, the WorkerClient, so existing
                         single-controller behavior is preserved while the
                         coordinator gets a non-blocking copy of every
                         closed-window record.
@@ -41,7 +41,7 @@ Thread safety contract:
     The single-writer property is maintained by the fact that only
     the POX event thread calls send_telemetry() in production. If
     multiple threads ever call it concurrently, wrap the sendall()
-    in a threading.Lock — but that is not required today.
+    in a threading.Lock, but that is not required today.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ class WorkerClient:
 
     Exposes a fail-open send path and a background reader thread that
     invokes on_drop_rule_command(cmd) when the coordinator dispatches a
-    mitigation command. The reader thread also handles reconnect — when
+    mitigation command. The reader thread also handles reconnect: when
     the socket dies, it sleeps reconnect_interval_seconds and tries again.
     """
 
@@ -150,7 +150,7 @@ class WorkerClient:
         with self._connect_lock:
             self._sock = sock
             self._connected = True
-            self._log_warned_this_cycle = False  # fresh cycle — re-arm warning
+            self._log_warned_this_cycle = False  # fresh cycle, re-arm warning
         logger.info(
             "WorkerClient[%s]: connected to coordinator at %s:%d",
             self.worker_id,
@@ -235,7 +235,7 @@ class WorkerClient:
 
         Returns True if the message was sent, False if dropped (typically
         because the socket is mid-reconnect or unwritable). Fail-open by
-        design — a False return must never crash the caller.
+        design: a False return must never crash the caller.
 
         Thread safety: callable from any thread. Holds no locks during the
         sendall() call. The single-writer property holds in production
@@ -309,7 +309,7 @@ class CoordinatorTeeSink:
     Satisfies the minimal TextIO interface TelemetryEmitter calls
     (write() and flush()). Each JSON line is:
 
-        1. Written to the wrapped stdout sink first — preserves existing
+        1. Written to the wrapped stdout sink first, preserving existing
            single-controller stdout-streaming behavior verbatim.
         2. Parsed back into a dict and pushed to WorkerClient.send_telemetry().
            If the client is disconnected, the push is silently dropped

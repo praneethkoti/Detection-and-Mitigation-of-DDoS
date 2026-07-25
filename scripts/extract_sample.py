@@ -1,7 +1,7 @@
 """Stratified extraction of a tiny CICDDoS2019 sample for demo / CI use.
 
 The Phase 3 PCA + RandomForest training pipeline consumes
-samples/cicddos2019_sample.csv. That CSV is **not** committed in Phase 2 —
+samples/cicddos2019_sample.csv. That CSV is **not** committed in Phase 2:
 the user runs this script against their own download of the CICDDoS2019
 dataset (see data/README.md) and the resulting file is committed alongside
 the Phase 3 training notebook.
@@ -14,7 +14,7 @@ Behavior:
 - Reads the full CICDDoS2019 CSV with pandas.
 - Requires a ``Label`` column; fails loudly if missing.
 - Stratified-samples ~2000 rows preserving the benign/attack ratio of the source.
-- Uses numpy.random.default_rng(seed) for index draws — byte-identical output
+- Uses numpy.random.default_rng(seed) for index draws, byte-identical output
   across machines and OSes given the same input file + same --rows + same --seed.
   (pandas.DataFrame.sample(random_state=...) has had cross-version drift; the
    default_rng path is the more durable contract.)
@@ -47,7 +47,7 @@ def stratified_sample(df: pd.DataFrame, n_rows: int, seed: int) -> pd.DataFrame:
     """Return a stratified sample of ~n_rows rows, preserving Label ratios.
 
     Per-group quota is round(n_rows * group_proportion). Within each group
-    we pick row indices via numpy.random.default_rng(seed) — deterministic
+    we pick row indices via numpy.random.default_rng(seed), deterministic
     across pandas versions and OS.
     """
     rng = np.random.default_rng(seed)

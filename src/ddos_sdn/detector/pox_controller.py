@@ -30,10 +30,10 @@ from ddos_sdn.detector.telemetry import TelemetryEmitter
 cfg = load_config()
 log = core.getLogger()
 
-# Phase 4b §4b.D — Opt-in coordinator integration.
+# Phase 4b §4b.D: Opt-in coordinator integration.
 # When cfg["coordinator"]["enabled"] is False (the default and the configuration
 # the Phase 3 V-suite + demo.py exercise), `_coordinator_client` stays None and
-# EntropyAnalyzer is constructed with its default stdout TelemetryEmitter — i.e.
+# EntropyAnalyzer is constructed with its default stdout TelemetryEmitter, i.e.
 # Phase 3 single-controller behavior is preserved bit-for-bit.
 # When enabled=True, a WorkerClient is constructed and wrapped in a
 # CoordinatorTeeSink that tees each closed-window record to BOTH stdout
@@ -50,7 +50,7 @@ def install_drop_rule_from_coordinator(cmd: dict) -> None:
 
     Builds the same ofp_flow_mod that Phase 3 §3.A's check_ddos() builds,
     but from the coordinator's command fields. The local detection +
-    mitigation loop is unchanged — this is an ADDITIONAL install path
+    mitigation loop is unchanged; this is an ADDITIONAL install path
     triggered by cross-worker correlation, not a replacement.
 
     Logs `INSTALL DROP RULE (coordinator)` so traceability is grep-able
@@ -85,7 +85,7 @@ def _build_entropy_instance() -> EntropyAnalyzer:
     """Construct the module-level EntropyAnalyzer.
 
     Standalone path (coordinator.enabled=false): default TelemetryEmitter
-    writing to stdout — identical to Phase 3 behavior.
+    writing to stdout, identical to Phase 3 behavior.
 
     Coordinator path (coordinator.enabled=true): construct a WorkerClient,
     wrap stdout + client in a CoordinatorTeeSink, hand the sink to a
@@ -117,7 +117,7 @@ entropy_instance = _build_entropy_instance()
 # Phase 3 §3.A: keyed by (dpid, port) tuple so per-key reset is possible.
 # Each entry: {"count": int, "nw_src": str | None}. nw_src is captured from
 # entropy_instance.top_src at the moment monitor_ddos first records an event
-# on this (dpid, port) — it's the attacker IP the controller will install
+# on this (dpid, port). It's the attacker IP the controller will install
 # an ofp_flow_mod drop rule against.
 port_stats = {}
 

@@ -1,4 +1,4 @@
-"""Phase 4b §4b.A — East-West wire protocol.
+"""Phase 4b §4b.A: East-West wire protocol.
 
 JSON over TCP, line-delimited. Pure-stdlib, no new dependencies. The
 serialization shape mirrors the existing telemetry contract from
@@ -7,16 +7,16 @@ the same one Phase 1 §1.E baked into the 13-field schema.
 
 Three message types, distinguished by a top-level `type` field:
 
-    WORKER_TELEMETRY   — worker → coordinator, one per closed entropy window.
+    WORKER_TELEMETRY     worker → coordinator, one per closed entropy window.
                          Carries the existing 13-field telemetry record
                          verbatim under a `record` field, plus a `worker_id`
                          envelope so the coordinator knows who reported it.
 
-    DROP_RULE_COMMAND  — coordinator → worker, when cross-worker correlation
+    DROP_RULE_COMMAND    coordinator → worker, when cross-worker correlation
                          decides to mitigate. Carries the (dpid, in_port,
                          nw_src, hard_timeout) tuple plus a UUID command_id.
 
-    ACK                — worker → coordinator, confirms the drop rule was
+    ACK                  worker → coordinator, confirms the drop rule was
                          dispatched as an ofp_flow_mod. Echoes the
                          command_id so the coordinator can close the loop.
 
@@ -29,9 +29,9 @@ Three message types, distinguished by a top-level `type` field:
 #      "the source IP the drop rule targets", forever.)
 #   3. New fields can be APPENDED to existing message types without
 #      bumping SCHEMA_VERSION. Readers MUST tolerate unknown
-#      additional fields — that is the additive-evolution path.
+#      additional fields; that is the additive-evolution path.
 #   4. SCHEMA_VERSION bumps if and only if the field set semantically
-#      breaks — e.g. renaming `nw_src` to `attacker_ip`, changing
+#      breaks, e.g. renaming `nw_src` to `attacker_ip`, changing
 #      `hard_timeout` from seconds to milliseconds, or removing a
 #      message type. After a bump, the prior schema is dead; mixed
 #      clusters at boundary versions are unsupported.
@@ -39,7 +39,7 @@ Three message types, distinguished by a top-level `type` field:
 #      change in this module docstring with a "v1 → v2" section and
 #      update every test that hardcodes the integer.
 #
-# validate() contract — strict on identity, lax on additions:
+# validate() contract: strict on identity, lax on additions:
 #
 #   - RAISES ProtocolError when:
 #       * `type` is missing

@@ -9,18 +9,18 @@ the controller would send to a real OVS switch.
 
 Three behavioral assertions (Phase 3 §3.J):
 
-  1. test_check_ddos_installs_flow_mod_above_threshold —
+  1. test_check_ddos_installs_flow_mod_above_threshold:
      synthetic port_stats with count=60 triggers exactly one
      ofp_flow_mod(command=OFPFC_ADD, in_port=3, nw_src=10.0.0.1,
                   actions=[], hard_timeout=30,
                   priority=OFP_DEFAULT_PRIORITY+1) to dpid=1.
 
-  2. test_check_ddos_below_threshold_does_nothing —
+  2. test_check_ddos_below_threshold_does_nothing:
      count=10 (below threshold=50) dispatches zero messages AND leaves
-     port_stats entries untouched (count stays at 10) — locks the
+     port_stats entries untouched (count stays at 10), locking the
      "non-installed entries keep accumulating" semantic.
 
-  3. test_check_ddos_retains_nw_src_after_install —
+  3. test_check_ddos_retains_nw_src_after_install:
      After install, port_stats[(1,3)]["count"] == 0 (reset) and
      port_stats[(1,3)]["nw_src"] == "10.0.0.1" (retained). This is the
      recovery-semantics regression guard: a returning attacker after
@@ -218,7 +218,7 @@ def test_pox_controller_falls_back_to_standalone_when_coordinator_disabled() -> 
     """
     # The standalone path must have left the coordinator handle uninitialized.
     assert ctrl._coordinator_client is None, (
-        "coordinator.enabled=false must leave _coordinator_client=None — "
+        "coordinator.enabled=false must leave _coordinator_client=None: "
         "no East-West socket should be opened in standalone mode"
     )
     assert ctrl._coordinator_enabled is False, (

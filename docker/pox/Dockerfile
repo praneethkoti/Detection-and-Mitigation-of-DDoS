@@ -1,4 +1,4 @@
-# POX controller image — loads ddos_sdn.detector.pox_controller and exposes
+# POX controller image: loads ddos_sdn.detector.pox_controller and exposes
 # OpenFlow 1.0 on TCP/6633.
 #
 # Multi-arch: amd64 and arm64 (Apple Silicon reviewers).

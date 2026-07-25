@@ -1,10 +1,10 @@
-"""Phase 4b §4b.B — Coordinator TCP server.
+"""Phase 4b §4b.B: Coordinator TCP server.
 
 Accepts JSON-over-TCP connections from worker controllers, correlates
 per-window telemetry across workers using tolerance-window bucketing,
 and dispatches DROP_RULE_COMMAND when min_corroborating_workers report
 the same top_src + verdict_entropy=ATTACK within the same time bucket
-(or the immediately-prior bucket — see §4b.B current+previous lookup).
+(or the immediately-prior bucket, see §4b.B current+previous lookup).
 
 Correlation rule (locked decisions Q2 + user note a):
 
@@ -13,7 +13,7 @@ Correlation rule (locked decisions Q2 + user note a):
     On every WORKER_TELEMETRY with verdict_entropy=="ATTACK", look up
     other recent messages with the same top_src in BOTH:
         bucket B   (the current bucket)
-        bucket B-1 (the previous bucket — boundary-crossing lookup
+        bucket B-1 (the previous bucket, boundary-crossing lookup
                     so messages straddling a bucket boundary still
                     correlate; see test_correlation_across_bucket_boundary)
 
@@ -157,7 +157,7 @@ class CoordinatorServer:
                 if dpid in seen:
                     raise ValueError(
                         f"coordinator config: dpid={dpid} assigned to both "
-                        f"{seen[dpid]!r} and {wid!r} — partition_dpids must be "
+                        f"{seen[dpid]!r} and {wid!r}. partition_dpids must be "
                         f"mutually exclusive across workers."
                     )
                 seen[dpid] = wid

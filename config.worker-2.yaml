@@ -1,4 +1,4 @@
-# Phase 4b §4b.G — Worker-2 config override.
+# Phase 4b §4b.G: Worker-2 config override.
 #
 # Loaded by the `pox-worker-2` service under docker-compose's `distributed`
 # profile. Same shape as config.yaml but with two coordinator-section
@@ -8,7 +8,7 @@
 #   - host: "coordinator"         (the docker-compose service name)
 #
 # Everything else (detector tuning, controller behavior, telemetry shape)
-# inherits from the same DEFAULTS that drive config.yaml — config.py's
+# inherits from the same DEFAULTS that drive config.yaml; config.py's
 # deep-merge keeps partial overrides valid.
 #
 # This file is committed (not a secret); workers self-identify on the

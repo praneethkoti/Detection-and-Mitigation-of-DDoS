@@ -1,4 +1,4 @@
-"""Training pipeline — produces models/pca.joblib and models/rf.joblib.
+"""Training pipeline: produces models/pca.joblib and models/rf.joblib.
 
 # Refactored in Phase 4a to extend the per-window feature vector from
 # 8 features to 10 (adding `entropy_size` at index 2 and
@@ -6,12 +6,18 @@
 # in git at commit f7d39fb. `git log notebooks/train_pca_and_rf.py`
 # shows the evolution.
 
-This is the source-of-truth Python module that the .ipynb mirrors cell-by-cell.
-Running it directly (`python notebooks/train_pca_and_rf.py`) is equivalent to
-running the notebook end-to-end; the .ipynb exists as a portfolio artifact
-that a reviewer can open in nbviewer.
+This module is the training pipeline; run it directly with
+`python notebooks/train_pca_and_rf.py`. It is structured as numbered cells so
+it reads like a notebook, but no .ipynb is committed: the cell functions below
+ARE the source of truth. (Phase 4c corrected an earlier claim in this docstring
+that an .ipynb mirrored this file cell-by-cell; that artifact was never
+committed.)
 
-Pipeline (per Phase 3 §3.F, extended in Phase 4a §4a.C):
+Phase 4c §4c.D trains RF on a five-way label (BENIGN plus four attack classes)
+while PCA stays benign-only unsupervised and binary. See cell_6_evaluate for
+the two metric views this produces.
+
+Pipeline (per Phase 3 §3.F, extended in Phase 4a §4a.C and Phase 4c §4c.D):
 
     1. Load samples/cicddos2019_sample.csv. Auto-detects whether the rows
        are pre-windowed (synth fallback path; columns = FEATURE_COLS+Label)
@@ -20,11 +26,11 @@ Pipeline (per Phase 3 §3.F, extended in Phase 4a §4a.C):
        Fwd Packet Length Std, Label).
     2. If primary path: reconstruct per-packet stream, slide 250-packet
        windows, compute 10-feature vector per window, label by majority.
-       If synth path: skip — rows already are 10-feature windows.
+       If synth path: skip, rows already are 10-feature windows.
     3. Stratified 80/20 train/test split, random_state=42.
     4. Fit PCA(n_components=2) on the BENIGN training rows only. Calibrate
        threshold = 99th percentile of Mahalanobis distances over the SAME
-       benign training rows (per §3.B — full 80% benign training portion,
+       benign training rows (per §3.B: the full 80% benign training portion,
        not the held-out 20%).
     5. Fit RandomForestClassifier on the full training split.
     6. Evaluate both on the held-out 20%: precision / recall / F1 +
@@ -57,6 +63,8 @@ from sklearn.metrics import (
     recall_score,
 )
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_CSV = REPO_ROOT / "samples" / "cicddos2019_sample.csv"
@@ -72,6 +80,19 @@ from ddos_sdn.detector.pca_detector import PCADetector  # noqa: E402
 LABEL_COL = "Label"
 WINDOW = 250
 RANDOM_STATE = 42
+
+# Phase 4c: the CSV's Label column is five-way. PCA is unsupervised and
+# benign-only, and the three-detector comparison is a binary question
+# ("did it flag this window?"), so both binarize via this helper. RF alone
+# consumes the full multi-class label.
+BENIGN_LABEL = "BENIGN"
+ATTACK_LABEL = "ATTACK"
+ATTACK_CLASSES = ("UDP_FLOOD", "SYN_FLOOD", "SLOWLORIS", "NTP_AMP")
+
+
+def _binarize(y):
+    """Map the five-way label to BENIGN/ATTACK for binary metrics."""
+    return np.where(y == BENIGN_LABEL, BENIGN_LABEL, ATTACK_LABEL)
 
 # CICDDoS2019 column name → our feature contract. Used in cell_2_to_windows
 # for the primary (real-data) path so we read per-flow packet-length stats
@@ -101,10 +122,10 @@ def cell_1_load() -> pd.DataFrame:
 def cell_2_to_windows(df: pd.DataFrame) -> pd.DataFrame:
     expected_synth = set(FEATURE_COLS) | {LABEL_COL}
     if expected_synth.issubset(df.columns):
-        print("[2] input is pre-windowed (synth path) — skipping flow reconstruction")
+        print("[2] input is pre-windowed (synth path), skipping flow reconstruction")
         return df[list(FEATURE_COLS) + [LABEL_COL]].copy()
 
-    print("[2] input is CICDDoS2019 flow rows — reconstructing per-packet stream")
+    print("[2] input is CICDDoS2019 flow rows, reconstructing per-packet stream")
     df_sorted = df.sort_values("Timestamp", kind="stable").reset_index(drop=True)
     dst_stream: list[str] = []
     src_stream: list[str] = []
@@ -137,7 +158,7 @@ def _features(
     """Compute the 10-feature row for one window.
 
     For the synth path (the current Phase 4a default), `sizes` is None and
-    entropy_size / packet_size_std_dev fall back to 0 — but the synth path
+    entropy_size / packet_size_std_dev fall back to 0, but the synth path
     is pre-windowed, so this helper isn't called there. For the real CIC
     reconstruction path, sizes can be passed if the caller pulled per-flow
     `Fwd Packet Length Std` from CICDDoS2019 rows. ddof=0 explicit.
@@ -150,7 +171,7 @@ def _features(
     if sizes:
         size_c = Counter(sizes)
         entropy_size = _shannon(size_c, len(sizes))
-        # ddof=0 explicit — train/inference symmetry guard (see module docstring).
+        # ddof=0 explicit: train/inference symmetry guard (see module docstring).
         packet_size_std_dev = float(np.std(sizes, ddof=0))
     else:
         entropy_size = 0.0
@@ -188,17 +209,24 @@ def _majority(labels: list[str]) -> str:
 # Cell 3: train/test split
 # ----------------------------------------------------------------------
 def cell_3_split(windows: pd.DataFrame):
+    """Stratified 80/20 split over the five-way label (Phase 4c).
+
+    Stratifying on the multi-class label keeps every attack class represented
+    in both halves; stratifying on a binarized label would let a whole class
+    land entirely in train or entirely in test.
+    """
     X = windows[list(FEATURE_COLS)].to_numpy()
     y = windows[LABEL_COL].to_numpy()
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.20, stratify=y, random_state=RANDOM_STATE,
     )
-    print(
-        f"[3] stratified 80/20 split: train={len(X_train)} "
-        f"(BENIGN={int((y_train == 'BENIGN').sum())}, ATTACK={int((y_train == 'ATTACK').sum())})  "
-        f"test={len(X_test)} "
-        f"(BENIGN={int((y_test == 'BENIGN').sum())}, ATTACK={int((y_test == 'ATTACK').sum())})"
-    )
+
+    def _counts(arr) -> str:
+        return ", ".join(f"{lbl}={int((arr == lbl).sum())}" for lbl in sorted(set(y)))
+
+    print(f"[3] stratified 80/20 split on the {len(set(y))}-way label")
+    print(f"    train={len(X_train)}  ({_counts(y_train)})")
+    print(f"    test ={len(X_test)}  ({_counts(y_test)})")
     return X_train, X_test, y_train, y_test
 
 
@@ -208,7 +236,27 @@ def cell_3_split(windows: pd.DataFrame):
 def cell_4_fit_pca(X_train, y_train) -> PCADetector:
     benign_train = X_train[y_train == "BENIGN"]
     print(f"[4] fitting PCA(n_components=2) on {len(benign_train)} benign training rows")
-    pca = PCA(n_components=2, whiten=False, random_state=RANDOM_STATE)
+    # StandardScaler ahead of PCA (§4c.A redo). The 10 features span wildly
+    # different scales: pps runs to ~3e5 while the entropy features live on
+    # [0, 8]. Unscaled, pps carries >99.99% of the variance and PC1 is
+    # effectively "pps", which makes the Mahalanobis distance a rate detector
+    # rather than a shape detector.
+    #
+    # This was latent before the §4c.A redo rather than introduced by it: the
+    # old generator emitted a constant pps=250000 for every benign row, so the
+    # feature had zero variance and could not dominate the fit. Once benign
+    # traffic was given a realistic rate distribution, the missing scaling
+    # became load-bearing and PCA recall fell to 0.17 until this was added.
+    #
+    # Wrapped in a Pipeline so the saved artifact still exposes .transform()
+    # and PCADetector needs no change: its schema stores whatever object has
+    # the transform contract under the "pca" key.
+    pca = Pipeline(
+        [
+            ("scale", StandardScaler()),
+            ("pca", PCA(n_components=2, whiten=False, random_state=RANDOM_STATE)),
+        ]
+    )
     pca.fit(benign_train)
     z = pca.transform(benign_train)
     benign_mean = z.mean(axis=0)
@@ -264,27 +312,92 @@ def cell_6_evaluate(
     X_test,
     y_test,
 ) -> dict:
+    """Held-out evaluation, binary and per-attack-class (Phase 4c §4c.D).
+
+    Two views of the same predictions:
+
+      Binary   all three detectors answer "is this window an attack?". This is
+               the Phase 3/4a comparison, preserved so the numbers stay
+               comparable across phases.
+      Per-class  each detector's recall on each attack class separately. This
+               is the Phase 4c story: entropy only catches classes whose
+               destination entropy collapses, while RF names the class.
+    """
     # Entropy-only verdict on the held-out rows: ATTACK iff entropy_dst < 1.66 bits
     # (the config threshold). This is what the Phase 1 detector would emit.
     threshold_bits = 1.66
-    entropy_preds = np.where(X_test[:, 0] < threshold_bits, "ATTACK", "BENIGN")
+    entropy_preds = np.where(X_test[:, 0] < threshold_bits, ATTACK_LABEL, BENIGN_LABEL)
     pca_preds = np.array([pca_det.verdict(row) for row in X_test])
     rf_preds = np.array([rf_det.verdict(row) for row in X_test])
+    rf_classes = np.array([rf_det.classify(row) for row in X_test])
+
+    y_binary = _binarize(y_test)
 
     metrics = {}
     for name, preds in [("entropy", entropy_preds), ("pca", pca_preds), ("rf", rf_preds)]:
-        p = precision_score(y_test, preds, pos_label="ATTACK", zero_division=0)
-        r = recall_score(y_test, preds, pos_label="ATTACK", zero_division=0)
-        f1 = f1_score(y_test, preds, pos_label="ATTACK", zero_division=0)
-        cm = confusion_matrix(y_test, preds, labels=["BENIGN", "ATTACK"])
-        metrics[name] = {"precision": p, "recall": r, "f1": f1, "cm": cm}
-    print("[6] held-out evaluation:")
+        p = precision_score(y_binary, preds, pos_label=ATTACK_LABEL, zero_division=0)
+        r = recall_score(y_binary, preds, pos_label=ATTACK_LABEL, zero_division=0)
+        f1 = f1_score(y_binary, preds, pos_label=ATTACK_LABEL, zero_division=0)
+        cm = confusion_matrix(y_binary, preds, labels=[BENIGN_LABEL, ATTACK_LABEL])
+        # Per-attack-class recall: of this class's windows, how many were
+        # flagged at all? Precision is not per-class meaningful for the binary
+        # detectors, since a false positive belongs to no attack class.
+        per_class = {}
+        for cls in ATTACK_CLASSES:
+            mask = y_test == cls
+            if not mask.any():
+                per_class[cls] = float("nan")
+                continue
+            per_class[cls] = float((preds[mask] == ATTACK_LABEL).mean())
+        metrics[name] = {
+            "precision": p,
+            "recall": r,
+            "f1": f1,
+            "cm": cm,
+            "per_class_recall": per_class,
+        }
+
+    # RF's multi-class scores: per-class F1 against the true five-way label.
+    present = [c for c in ATTACK_CLASSES if (y_test == c).any()]
+    rf_class_f1 = f1_score(y_test, rf_classes, labels=present, average=None, zero_division=0)
+    metrics["rf"]["per_class_f1"] = dict(zip(present, (float(v) for v in rf_class_f1), strict=True))
+    metrics["rf"]["macro_f1"] = float(
+        f1_score(y_test, rf_classes, average="macro", zero_division=0)
+    )
+    metrics["rf"]["multiclass_cm"] = confusion_matrix(
+        y_test, rf_classes, labels=[BENIGN_LABEL] + list(present)
+    )
+    metrics["_labels"] = [BENIGN_LABEL] + list(present)
+
+    print("[6] held-out evaluation (binary: is this window an attack?):")
     print(f"    {'detector':<12} {'precision':>10} {'recall':>10} {'f1':>10}")
-    for name, m in metrics.items():
+    for name in ("entropy", "pca", "rf"):
+        m = metrics[name]
         print(f"    {name:<12} {m['precision']:>10.4f} {m['recall']:>10.4f} {m['f1']:>10.4f}")
     print("    confusion matrices (rows=true [BENIGN, ATTACK], cols=pred [BENIGN, ATTACK]):")
-    for name, m in metrics.items():
-        print(f"      {name}: {m['cm'].tolist()}")
+    for name in ("entropy", "pca", "rf"):
+        print(f"      {name}: {metrics[name]['cm'].tolist()}")
+
+    print()
+    print("    per-attack-class detection rate (recall within each class):")
+    header = "      {:<12}".format("detector") + "".join(f"{c:>12}" for c in ATTACK_CLASSES)
+    print(header)
+    for name in ("entropy", "pca", "rf"):
+        cells = "".join(
+            f"{metrics[name]['per_class_recall'][c]:>12.4f}" for c in ATTACK_CLASSES
+        )
+        print(f"      {name:<12}" + cells)
+
+    print()
+    print(f"    RF multi-class macro F1: {metrics['rf']['macro_f1']:.4f}")
+    print("    RF per-class F1: " + "  ".join(
+        f"{c}={v:.4f}" for c, v in metrics["rf"]["per_class_f1"].items()
+    ))
+    print(f"    RF multi-class confusion (labels={metrics['_labels']}):")
+    for row_label, row in zip(
+        metrics["_labels"], metrics["rf"]["multiclass_cm"].tolist(), strict=True
+    ):
+        print(f"      {row_label:<11} {row}")
     return metrics
 
 
@@ -307,7 +420,25 @@ def cell_7_save(pca_det: PCADetector, rf_det: MLDetector) -> None:
 # Cell 8: print copy-paste-ready F1 block for README
 # ----------------------------------------------------------------------
 def cell_8_readme(metrics: dict) -> None:
-    print("[8] README §Evaluation table (paste into README.md):")
+    """Emit the copy-paste-ready README §Evaluation tables (Phase 4c §4c.F)."""
+    print("[8] README §Evaluation tables (paste into README.md):")
+    print()
+    print("Multi-class detection rate (recall within each attack class):")
+    print()
+    header = "| Detector       | " + " | ".join(f"{c}" for c in ATTACK_CLASSES) + " | Macro F1 |"
+    print(header)
+    print("|---|" + "---:|" * (len(ATTACK_CLASSES) + 1))
+    for name, label in [("entropy", "Entropy-only"), ("pca", "PCA-gated"), ("rf", "RandomForest")]:
+        m = metrics[name]
+        cells = " | ".join(f"{m['per_class_recall'][c]:.4f}" for c in ATTACK_CLASSES)
+        # Macro F1 column: RF reports true multi-class macro F1 over the
+        # five-way label. The binary detectors cannot name a class, so they
+        # report their binary attack F1, which is the fairest comparable
+        # number and is labelled as such in the README prose.
+        macro = m["macro_f1"] if "macro_f1" in m else m["f1"]
+        print(f"| {label:<14} | {cells} | {macro:.4f} |")
+    print()
+    print("Binary detection (is this window an attack?):")
     print()
     print("| Detector       | Precision | Recall | F1   |")
     print("|---|---:|---:|---:|")

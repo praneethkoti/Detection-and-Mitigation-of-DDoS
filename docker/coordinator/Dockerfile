@@ -1,7 +1,7 @@
-# Phase 4b §4b.G — East-West coordinator image.
+# Phase 4b §4b.G: East-West coordinator image.
 #
 # Minimal python:3.11-slim base. The coordinator is a pure-stdlib TCP server
-# (no POX, no scapy, no ML stack) — it just terminates JSON-over-TCP frames
+# (no POX, no scapy, no ML stack); it just terminates JSON-over-TCP frames
 # from worker controllers and dispatches DROP_RULE_COMMANDs when correlation
 # fires. Total image footprint is small by design.
 #

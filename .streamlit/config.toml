@@ -1,7 +1,7 @@
 # Streamlit Community Cloud config for the DDoS-SDN dashboard (Phase 4a §4a.K).
 #
 # This file controls the dashboard's theme and server runtime. No secrets
-# live here — Streamlit Cloud reads .streamlit/secrets.toml separately
+# live here. Streamlit Cloud reads .streamlit/secrets.toml separately
 # and that file is not in this repo (see streamlit_app.py header comment).
 
 [theme]

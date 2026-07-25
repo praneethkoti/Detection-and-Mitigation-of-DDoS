@@ -57,7 +57,7 @@ def test_pca_recognizes_benign_baseline() -> None:
 
     Values match a representative row from samples/cicddos2019_sample.csv
     (the synth dataset PCA was trained on). Std-dev of [64, 128, 256, 512,
-    1024, 1500] mix lands around 530 — not 440 — once the weights settle.
+    1024, 1500] mix lands around 530 (not 440) once the weights settle.
     """
     pca = _detector()
     feature_vector = [5.81, 7.06, 2.57, 250000.0, 250.0, 150.0, 62.0, 0.036, 0.02, 531.7]

@@ -1,7 +1,7 @@
-"""Phase 4b §4b.F — coordinator correlation logic tests.
+"""Phase 4b §4b.F: coordinator correlation logic tests.
 
 Seven tests. The headline assertion is test_two_workers_same_top_src_within
-_window_DOES_trigger_drop_rule — the project's Phase 4b narrative kernel.
+_window_DOES_trigger_drop_rule, the project's Phase 4b narrative kernel.
 Two regression guards (per user note b) lock the design decisions:
 
     - test_correlation_across_bucket_boundary: the current+previous bucket
@@ -94,12 +94,12 @@ def test_two_workers_same_top_src_within_window_DOES_trigger_drop_rule() -> None
     server, dispatched = _make_server()
     sender = lambda w, c: dispatched.append((w, c))  # noqa: E731
 
-    # worker-1 reports ATTACK on top_src=10.0.0.1 — nothing fires yet.
+    # worker-1 reports ATTACK on top_src=10.0.0.1; nothing fires yet.
     issued1 = server.correlate(_record("10.0.0.1", dpid=1), "worker-1", sender=sender)
     assert issued1 == []
     assert dispatched == []
 
-    # worker-2 reports ATTACK on the SAME top_src in the SAME bucket — fires.
+    # worker-2 reports ATTACK on the SAME top_src in the SAME bucket; fires.
     issued2 = server.correlate(_record("10.0.0.1", dpid=3), "worker-2", sender=sender)
     assert (
         len(issued2) == 2
@@ -141,7 +141,7 @@ def test_correlation_window_expiry() -> None:
         clock=lambda: now[0],
     )
 
-    # worker-1 reports at t=0.0 — lands in bucket 0.
+    # worker-1 reports at t=0.0, landing in bucket 0.
     server.correlate(_record("10.0.0.1"), "worker-1", sender=sender)
     # Advance clock past 2 * tolerance so worker-1's bucket (0) is now
     # too old for the current+previous lookup from bucket 3.
@@ -152,7 +152,7 @@ def test_correlation_window_expiry() -> None:
 
 
 def test_two_workers_one_benign_does_NOT_trigger_drop_rule() -> None:
-    """Same top_src across two workers but one reports BENIGN — no command."""
+    """Same top_src across two workers but one reports BENIGN, so no command."""
     server, dispatched = _make_server()
     sender = lambda w, c: dispatched.append((w, c))  # noqa: E731
 
@@ -169,7 +169,7 @@ def test_correlation_across_bucket_boundary() -> None:
     # Worker-2's record lands in bucket floor((tolerance + 0.05) / tolerance) = 1.
     # Without the current+previous bucket lookup pattern in §4b.B, these two
     # would correlate against DIFFERENT buckets and no DROP_RULE_COMMAND would
-    # fire — silently missing a real cross-worker attack because the messages
+    # fire, silently missing a real cross-worker attack because the messages
     # straddled a bucket boundary.
     # The current+previous lookup pattern (correlate() checks both bucket B
     # and bucket B-1) catches this. If this test fails, the lookup pattern
@@ -190,7 +190,7 @@ def test_correlation_across_bucket_boundary() -> None:
     assert server._bucket_index(now[0]) == 0  # sanity: bucket 0
     assert dispatched == []  # only one worker so far
 
-    # Advance the clock by 100ms — into bucket 1.
+    # Advance the clock by 100ms, into bucket 1.
     now[0] = tolerance + 0.05
     assert server._bucket_index(now[0]) == 1  # sanity: now in bucket 1
 

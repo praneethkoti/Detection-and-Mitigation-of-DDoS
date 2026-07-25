@@ -31,7 +31,7 @@ def test_entropy_uniform_is_max_for_window_of_4() -> None:
     a = _make_analyzer(window=4)
     for ip in ["1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4"]:
         a.collect_statistics(ip)
-    # log2(4) == 2.0 — uniform distribution achieves maximum entropy.
+    # log2(4) == 2.0: uniform distribution achieves maximum entropy.
     assert a.entropy_value == pytest.approx(2.0)
 
 

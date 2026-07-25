@@ -72,14 +72,16 @@ def _replay_pcap(
     sink: io.TextIOBase,
     pca_detector: Any = None,
     ml_detector: Any = None,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, list[str]]:
     """Replay one PCAP through a fresh EntropyAnalyzer.
 
     Returns:
-        (records, first_attack_packet_index_1based_or_neg1)
+        (records, first_attack_packet_index_1based_or_neg1, rf_class_labels)
         - records: the parsed JSON dicts emitted for each closed window
         - first_attack_packet_index: the 1-based packet index that closed
           the first ATTACK window, or -1 if no attack window closed
+        - rf_class_labels: MLDetector.classify() per closed window, empty when
+          no RF artifact is loaded (Phase 4c §4c.B)
     """
     capture = io.StringIO()
     emitter = TelemetryEmitter(sink=capture, clock=lambda: 0.0)
@@ -94,6 +96,7 @@ def _replay_pcap(
     packet_index = 0
     first_attack_packet_index = -1
     windows_emitted = 0
+    class_labels: list[str] = []
 
     packets = rdpcap(str(path))
     for pkt in packets:
@@ -103,7 +106,7 @@ def _replay_pcap(
         # Phase 4a §4a.A: pass packet size so entropy_size + packet_size_std_dev
         # are populated in the telemetry record and in the 10-feature vector
         # PCA/RF score. len(pkt) is the on-the-wire frame length (Ether + IP + UDP
-        # + payload) — the same metric the runtime POX controller would see.
+        # + payload), the same metric the runtime POX controller would see.
         analyzer.collect_statistics(pkt[IP].dst, src_ip=pkt[IP].src, packet_size=len(pkt))
 
         # Did the analyzer just close a window? Each new window appends to dst_entropy.
@@ -118,9 +121,14 @@ def _replay_pcap(
             record = json.loads(last_line)
             if record["verdict_entropy"] == "ATTACK" and first_attack_packet_index < 0:
                 first_attack_packet_index = packet_index
+            # Phase 4c §4c.B: capture the RF class while the analyzer still
+            # holds the full 10-feature vector. Five of those features are not
+            # telemetry fields, so this cannot be recovered from `record`.
+            if ml_detector is not None and analyzer.last_feature_vector is not None:
+                class_labels.append(ml_detector.classify(analyzer.last_feature_vector))
 
     records = [json.loads(line) for line in capture.getvalue().splitlines()]
-    return records, first_attack_packet_index
+    return records, first_attack_packet_index, class_labels
 
 
 def _f1_from_records(
@@ -132,7 +140,7 @@ def _f1_from_records(
 
     Returns the F1 as a 2-decimal string, or 'n/a' when the field is JSON null
     on every record (i.e. the corresponding detector was not loaded). This
-    keeps the summary line honest per working agreement #4 — no fabricated F1.
+    keeps the summary line honest per working agreement #4: no fabricated F1.
     """
     has_values = any(r.get(verdict_field) is not None for r in (*attack_records, *normal_records))
     if not has_values:
@@ -144,11 +152,35 @@ def _f1_from_records(
     return f"{(2 * tp / denom):.2f}" if denom else "n/a"
 
 
+def _format_rf_class_counts(class_labels: list[str], ml_detector: Any) -> str:
+    """Format the RF class tally for the [SUMMARY] block (Phase 4c §4c.B).
+
+    Labels are collected during replay (see _replay_pcap) because five of the
+    ten features -- unique_src_count, unique_dst_count, top_dst_frequency,
+    top_src_frequency, packet_size_std_dev -- are deliberately absent from the
+    13-field telemetry schema. The vector cannot be reconstructed from the
+    emitted JSON, and Phase 4c does not widen that contract to make it
+    possible: the class label is additive metadata, not a schema field.
+    """
+    if ml_detector is None:
+        return "n/a (no RF artifact loaded)"
+    if len(getattr(ml_detector, "classes_", [])) < 3:
+        return "binary model (re-run notebooks/train_pca_and_rf.py for class labels)"
+    if not class_labels:
+        return "n/a (no attack windows)"
+    counts: dict[str, int] = {}
+    for label in class_labels:
+        counts[label] = counts.get(label, 0) + 1
+    return "  ".join(f"{label}={n}" for label, n in sorted(counts.items()))
+
+
 def _summarize(
     normal_records: list[dict[str, Any]],
     attack_records: list[dict[str, Any]],
     first_attack_packet_index: int,
     err: io.TextIOBase,
+    ml_detector: Any = None,
+    attack_class_labels: list[str] | None = None,
 ) -> bool:
     benign_windows = sum(1 for r in normal_records if r["verdict_entropy"] == "BENIGN")
     attack_windows_entropy = sum(1 for r in attack_records if r["verdict_entropy"] == "ATTACK")
@@ -190,6 +222,12 @@ def _summarize(
     )
     err.write(
         f"[SUMMARY] would-install flow_mod: nw_src={flow_mod_src}, in_port=N/A, hard_timeout=30\n"
+    )
+    # Phase 4c §4c.B: the specific attack class RF assigns to each attack
+    # window. Additive metadata only; verdict_rf in the JSON stays binary.
+    err.write(
+        f"[SUMMARY] RF class labels: "
+        f"{_format_rf_class_counts(attack_class_labels or [], ml_detector)}\n"
     )
 
     passed = (
@@ -254,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Phase 3: load PCA + RF detectors if their .joblib artifacts are on disk.
     # When absent (fresh clone before the training notebook runs), demo.py
-    # degrades gracefully — pca/rf verdict fields stay null, summary reports n/a.
+    # degrades gracefully: pca/rf verdict fields stay null, summary reports n/a.
     pca_det, ml_det = _load_pca_ml()
     if pca_det is None or ml_det is None:
         print(
@@ -263,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    normal_records, _ = _replay_pcap(
+    normal_records, _, _ = _replay_pcap(
         args.normal_pcap,
         args.window,
         args.threshold,
@@ -271,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         pca_detector=pca_det,
         ml_detector=ml_det,
     )
-    attack_records, first_attack_index = _replay_pcap(
+    attack_records, first_attack_index, attack_class_labels = _replay_pcap(
         args.attack_pcap,
         args.window,
         args.threshold,
@@ -288,7 +326,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    passed = _summarize(normal_records, attack_records, first_attack_index, sys.stderr)
+    passed = _summarize(
+        normal_records,
+        attack_records,
+        first_attack_index,
+        sys.stderr,
+        ml_detector=ml_det,
+        attack_class_labels=attack_class_labels,
+    )
     return 0 if passed else 1
 
 

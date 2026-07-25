@@ -4,29 +4,36 @@ Trains 2D PCA on benign per-window feature vectors, computes Mahalanobis
 distance of each new window's projection to the benign cluster centroid,
 and flags as ATTACK when the distance exceeds a threshold calibrated at
 the 99th percentile of benign training-set distances (the full 80%
-benign training portion — not the held-out 20%, which is reserved for F1
+benign training portion, not the held-out 20%, which is reserved for F1
 evaluation).
 
 Sklearn defaults justified in this docstring (per working agreement #1):
-    n_components=2     — matches v3 §4.1 verbatim; 2D is the only dim
+    n_components=2       matches v3 §4.1 verbatim; 2D is the only dim
                          where the Mahalanobis ellipse is trivially
                          explainable to a reviewer.
-    whiten=False       — keep the original variance scale so the
+    whiten=False         keep the original variance scale so the
                          Mahalanobis ellipse is interpretable.
-    random_state=42    — deterministic fit. Same training data → same
+    random_state=42      deterministic fit. Same training data → same
                          pca.joblib bytes.
 
-The 8-feature input vector ordering (must match training):
+The 10-feature input vector ordering (must match training). Phase 4a added
+entropy_size at index 2 and packet_size_std_dev at index 9; this docstring
+still said 8 until Phase 4c corrected it:
 
-    [entropy_dst, entropy_src, pps, window_packets,
+    [entropy_dst, entropy_src, entropy_size, pps, window_packets,
      unique_src_count, unique_dst_count,
-     top_dst_frequency, top_src_frequency]
+     top_dst_frequency, top_src_frequency, packet_size_std_dev]
 
 The headline narrative this detector enables: PCA flips the
 random-destination-flood case from BENIGN (entropy-only verdict) to ATTACK,
 because the benign cluster centroid lives in a region of high entropy_src
 + high entropy_dst, and random_dst windows sit far from it on the
 entropy_src axis even when entropy_dst is high.
+
+Phase 4c note: this detector stays deliberately binary and benign-only
+unsupervised even though RF went multi-class. Mahalanobis distance answers
+"how far from normal is this window", which is class-agnostic by
+construction; naming the attack class is MLDetector.classify()'s job.
 """
 
 from __future__ import annotations
@@ -115,7 +122,7 @@ class PCADetector:
             )
         z = self.pca.transform(x)[0]
         delta = z - self.benign_mean
-        # delta @ inv_cov @ delta — guaranteed >= 0; sqrt is the standard
+        # delta @ inv_cov @ delta: guaranteed >= 0; sqrt is the standard
         # Mahalanobis-distance formulation.
         d2 = float(delta @ self.benign_inv_cov @ delta)
         return math.sqrt(max(d2, 0.0))

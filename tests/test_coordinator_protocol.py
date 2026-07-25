@@ -1,4 +1,4 @@
-"""Phase 4b §4b.F — wire protocol unit tests.
+"""Phase 4b §4b.F: wire protocol unit tests.
 
 Five tests:
     - 3 round-trip tests, one per message type (WORKER_TELEMETRY,

@@ -7,7 +7,7 @@ distribution is broad and entropy stays close to log2(window); under a
 single-target volumetric flood the distribution collapses to one destination
 and entropy drops toward 0.
 
-Each closed window emits exactly one JSON line through TelemetryEmitter — the
+Each closed window emits exactly one JSON line through TelemetryEmitter: the
 external contract every downstream consumer reads. See
 ddos_sdn.detector.telemetry for the 13-field schema.
 
@@ -82,20 +82,24 @@ class EntropyAnalyzer:
         self.src_ips: list[str] = []
         self.packet_sizes: list[int] = (
             []
-        )  # Phase 4a §4a.A — tracks pkt sizes for entropy_size + std_dev
+        )  # Phase 4a §4a.A: tracks pkt sizes for entropy_size + std_dev
         self._window_start_t: float | None = None
 
         # History of per-window entropy values. Kept across windows so a caller
         # can replay or plot them (the report's "deltaY vs time" figures).
         self.dst_entropy: list[float] = []
 
-        # Last top_src / top_dst — read by the POX controller's monitor_ddos
+        # Last top_src / top_dst, read by the POX controller's monitor_ddos
         # and by anything else that wants the attacker / victim hint without
         # parsing the JSON-line stream.
         self.top_src: str | None = None
         self.top_dst: str | None = None
 
-        # Last verdict / value — read by the POX controller's is_attack() gate.
+        # Last closed window's 10-feature vector (Phase 4c §4c.B). None until
+        # the first window closes, and None for windows too small to score.
+        self.last_feature_vector: list[float] | None = None
+
+        # Last verdict / value, read by the POX controller's is_attack() gate.
         self.entropy_value: float = float(math.log2(self.window)) if self.window > 1 else 1.0
 
     def is_attack(self) -> bool:
@@ -144,9 +148,9 @@ class EntropyAnalyzer:
             top_src = src_counts.most_common(1)[0][0]
             entropy_src = self._shannon_bits(src_counts, total=len(self.src_ips))
 
-        # Phase 4a §4a.A — packet-size statistics.
+        # Phase 4a §4a.A: packet-size statistics.
         entropy_size: float | None = None
-        # ddof=0 explicit per features.py docstring — train/inference symmetry guard.
+        # ddof=0 explicit per features.py docstring: train/inference symmetry guard.
         packet_size_std_dev: float = 0.0
         if self.packet_sizes:
             size_counts = Counter(self.packet_sizes)
@@ -178,6 +182,15 @@ class EntropyAnalyzer:
             top_src=top_src,
             packet_size_std_dev=packet_size_std_dev,
         )
+        # Persist the vector on the instance for the same reason top_dst/top_src
+        # are persisted above: consumers that need the full 10 features cannot
+        # recover them from the emitted JSON, because five of them
+        # (unique_src_count, unique_dst_count, top_dst_frequency,
+        # top_src_frequency, packet_size_std_dev) are not telemetry fields.
+        # demo.py reads this to report RF class labels (Phase 4c §4c.B) without
+        # widening the 13-field schema.
+        self.last_feature_vector = feature_vector
+
         pca_mahalanobis: float | None = None
         verdict_pca: str | None = None
         if self.pca_detector is not None and feature_vector is not None:
@@ -247,14 +260,14 @@ class EntropyAnalyzer:
          unique_src_count, unique_dst_count,
          top_dst_frequency, top_src_frequency, packet_size_std_dev]
 
-        Returns None if no source IPs are tracked — the feature vector
+        Returns None if no source IPs are tracked; the feature vector
         requires entropy_src, and a window with no src information can't be
         scored. Phase 1/2 callers that don't pass src_ip continue to work;
         their telemetry records just keep verdict_pca / verdict_rf as null.
 
         When packet_size is not tracked (legacy callers), entropy_size falls
         back to 0.0 in the feature vector slot (the JSON telemetry still
-        emits null for entropy_size — feature vector uses 0.0 because the
+        emits null for entropy_size; the feature vector uses 0.0 because the
         ML inputs must be numeric; null is a JSON concept not a feature).
         """
         if not src_counts or entropy_src is None or top_src is None:
