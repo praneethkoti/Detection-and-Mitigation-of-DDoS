@@ -12,16 +12,19 @@ Usage:
     python scripts/check_no_emdash.py           # report and exit 1 on any hit
     python scripts/check_no_emdash.py --count   # print the count only
 
-Why a script rather than a shell one-liner: the obvious PowerShell version,
+Why a script rather than a shell one-liner: the obvious PowerShell one-liner
+using Select-String with a `-Path` glob and a literal em-dash pattern reports 0
+on a tree that contains hundreds of them. `-Path` with a glob does not recurse
+into subdirectories the way `-Recurse` implies, so src/, tests/, and docker/ are
+never visited. Console encoding also mangles a literal U+2014 in the pattern
+before it reaches the matcher. A gate that silently returns 0 on a dirty tree is
+worse than no gate. This script reads git's own tracked-file list and compares
+codepoints directly.
 
-    (Select-String -Path *.md,*.py -Recurse -Pattern "—" -SimpleMatch).Count
-
-reports 0 on a tree that contains hundreds of them. `-Path` with a glob does
-not recurse into subdirectories the way `-Recurse` implies, so src/, tests/,
-and docker/ are never visited, and the literal em-dash in the pattern is
-mangled by console encoding before it reaches the matcher. A gate that
-silently returns 0 on a dirty tree is worse than no gate. This script reads
-git's own tracked-file list and compares codepoints.
+This file is itself in scope: it is tracked, it ends in .py, and the
+tracked-file walk visits it like any other. There is no self-exemption, which
+is why both the module constant below and this docstring construct the
+character from its codepoint rather than containing it literally.
 """
 
 from __future__ import annotations
@@ -31,7 +34,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-EM_DASH = "—"
+EM_DASH = "\u2014"  # U+2014, the em-dash; constructed from its codepoint so
+# this file itself contains zero em-dashes and stays gate-clean. Byte-identical
+# at runtime to the literal character, so every comparison below is unchanged.
 
 # .txt added in the §4c.A redo: requirements.txt carried three em-dashes in its
 # comments and the gate reported a clean 0 the whole time, purely because .txt
