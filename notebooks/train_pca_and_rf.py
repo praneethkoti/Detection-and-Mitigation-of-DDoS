@@ -448,6 +448,211 @@ def cell_8_readme(metrics: dict) -> None:
 
 
 # ----------------------------------------------------------------------
+# Cell 9: README figures (Phase 4d.2 §4d.2.A / §4d.2.B)
+#
+# Two static matplotlib PNGs embedded in README §Evaluation. Rendered here
+# rather than by a separate script so they cannot drift from the metrics
+# printed above: both read the SAME held-out split produced by cell_3_split.
+#
+# Determinism: figsize + dpi are fixed and savefig is passed
+# metadata={"Software": None} so matplotlib does not stamp its version (and,
+# for some backends, a creation timestamp) into the PNG. Without that the
+# bytes change on every run and on every matplotlib upgrade.
+# ----------------------------------------------------------------------
+SCREENSHOTS_DIR = REPO_ROOT / "docs" / "screenshots"
+CONFUSION_PNG = SCREENSHOTS_DIR / "confusion_matrix.png"
+PCA_PROJECTION_PNG = SCREENSHOTS_DIR / "pca_projection.png"
+
+# Narrative order (Phase 4d.2 decision 1): BENIGN first, then the four attack
+# classes in the order the dashboard selector presents them. Matches the
+# confusion matrix in the Phase 4c commit body cell-for-cell.
+FIGURE_CLASS_ORDER = ("BENIGN", "UDP_FLOOD", "SYN_FLOOD", "SLOWLORIS", "NTP_AMP")
+
+# The matrix this figure is expected to reproduce, from the Phase 4c commit
+# body. Asserted before the PNG is written: a mismatch means either the split
+# stopped being deterministic or the committed numbers were wrong, and both are
+# worth halting on rather than quietly shipping a figure that contradicts the
+# README table next to it.
+EXPECTED_CONFUSION = (
+    (40, 0, 0, 0, 0),
+    (1, 71, 0, 0, 8),
+    (0, 0, 40, 0, 0),
+    (0, 0, 0, 40, 0),
+    (0, 5, 4, 0, 31),
+)
+
+# Per-class colors, shared by both figures so a reader moving between them maps
+# color to class once. Matches dashboard.py's RF_CLASS_COLORS in hue (these are
+# the saturated plot versions of those pale cell backgrounds).
+FIGURE_CLASS_COLORS = {
+    "BENIGN": "#2ca02c",
+    "UDP_FLOOD": "#d62728",
+    "SYN_FLOOD": "#ff7f0e",
+    "SLOWLORIS": "#bcbd22",
+    "NTP_AMP": "#9467bd",
+}
+FIGURE_CLASS_MARKERS = {
+    "BENIGN": "o",
+    "UDP_FLOOD": "X",
+    "SYN_FLOOD": "s",
+    "SLOWLORIS": "^",
+    "NTP_AMP": "D",
+}
+
+
+def cell_9_confusion_figure(rf_det: MLDetector, X_test, y_test) -> Path:
+    """Render the 5x5 multi-class confusion matrix to docs/screenshots/."""
+    import matplotlib
+
+    matplotlib.use("Agg")  # headless: no display in CI or on a server
+    import matplotlib.pyplot as plt
+
+    labels = list(FIGURE_CLASS_ORDER)
+    preds = np.array([rf_det.classify(row) for row in X_test])
+    cm = confusion_matrix(y_test, preds, labels=labels)
+    macro = f1_score(y_test, preds, average="macro", zero_division=0)
+
+    # Halt gate: the figure must agree with the committed numbers.
+    actual = tuple(tuple(int(v) for v in row) for row in cm)
+    if actual != EXPECTED_CONFUSION:
+        raise AssertionError(
+            "confusion matrix does not match the Phase 4c committed numbers.\n"
+            f"  expected: {EXPECTED_CONFUSION}\n"
+            f"  actual:   {actual}\n"
+            "Either the held-out split stopped being deterministic (a bug) or the "
+            "committed numbers were wrong. Halting rather than writing a figure that "
+            "contradicts the README table it sits next to."
+        )
+
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=100)
+    ax.imshow(cm, cmap="Blues", vmin=0, vmax=cm.max())
+
+    n = len(labels)
+    ax.set_xticks(range(n), labels, rotation=45, ha="right")
+    ax.set_yticks(range(n), labels)
+    ax.set_xlabel("predicted class")
+    ax.set_ylabel("true class")
+    ax.set_title(
+        f"Multi-class RF confusion matrix\n"
+        f"(240-window held-out split, macro F1 = {macro:.4f})",
+        pad=14,
+    )
+
+    # Counts only (decision 3): with 40-row classes the row totals are obvious,
+    # and percentages would double the ink for no added information. Diagonal
+    # bold so correct predictions read at a glance and the off-diagonal mass
+    # (the two designed-overlap pairs) stands out by contrast.
+    threshold = cm.max() / 2.0
+    for i in range(n):
+        for j in range(n):
+            value = int(cm[i, j])
+            ax.text(
+                j,
+                i,
+                str(value),
+                ha="center",
+                va="center",
+                color="white" if value > threshold else "#222222",
+                fontweight="bold" if i == j else "normal",
+                fontsize=13 if i == j else 11,
+            )
+
+    fig.tight_layout()
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    fig.savefig(CONFUSION_PNG, metadata={"Software": None})
+    plt.close(fig)
+    print(f"[9] wrote {CONFUSION_PNG.relative_to(REPO_ROOT)}  ({CONFUSION_PNG.stat().st_size} bytes)")
+    return CONFUSION_PNG
+
+
+def cell_9b_pca_projection_figure(pca_det: PCADetector, windows: pd.DataFrame) -> Path:
+    """Render the 2D PCA projection with the benign threshold ellipse.
+
+    The ellipse is the actual decision boundary: PCADetector.verdict() flags a
+    window when its Mahalanobis distance to `benign_mean` exceeds `threshold`,
+    and that is exactly the level set drawn here. All three values are read off
+    the fitted detector rather than recomputed, so the drawn boundary cannot
+    drift from the one the detector uses.
+
+    Note what this figure honestly shows: most attack windows fall INSIDE the
+    ellipse. That is the PCA calibration finding documented in README's "What
+    the PCA row means", not a rendering bug.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Ellipse
+
+    X = windows[list(FEATURE_COLS)].to_numpy()
+    y = windows[LABEL_COL].to_numpy()
+    # pca_det.pca is a Pipeline(StandardScaler, PCA) since the Phase 4c redo,
+    # so .transform() applies the scaling the detector was fitted with.
+    Z = pca_det.pca.transform(X)
+
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
+    for label in FIGURE_CLASS_ORDER:
+        mask = y == label
+        if not mask.any():
+            continue
+        ax.scatter(
+            Z[mask, 0],
+            Z[mask, 1],
+            s=26,
+            alpha=0.65,
+            c=FIGURE_CLASS_COLORS[label],
+            marker=FIGURE_CLASS_MARKERS[label],
+            edgecolors="white",
+            linewidths=0.4,
+            label=label,
+        )
+
+    # The threshold ellipse: the set of points at Mahalanobis distance
+    # `threshold` from benign_mean under benign_inv_cov. Eigen-decomposing the
+    # covariance (the inverse of the stored inv_cov) gives the axis lengths and
+    # rotation. Solid line (decision 4): the threshold is a hard comparison
+    # against a fixed percentile, and a dashed line would imply otherwise.
+    cov = np.linalg.inv(pca_det.benign_inv_cov)
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
+    order = eigenvalues.argsort()[::-1]
+    eigenvalues, eigenvectors = eigenvalues[order], eigenvectors[:, order]
+    angle = float(np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0])))
+    width, height = 2.0 * pca_det.threshold * np.sqrt(eigenvalues)
+    ax.add_patch(
+        Ellipse(
+            xy=tuple(pca_det.benign_mean),
+            width=width,
+            height=height,
+            angle=angle,
+            facecolor="none",
+            edgecolor="#111111",
+            linewidth=2.0,
+            zorder=5,
+            label=f"99th pct threshold (d={pca_det.threshold:.2f})",
+        )
+    )
+
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
+    ax.set_title(
+        "PCA projection: benign cluster with 99th-percentile threshold ellipse",
+        pad=12,
+    )
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    ax.grid(alpha=0.15)
+
+    fig.tight_layout()
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    fig.savefig(PCA_PROJECTION_PNG, metadata={"Software": None})
+    plt.close(fig)
+    print(
+        f"[9] wrote {PCA_PROJECTION_PNG.relative_to(REPO_ROOT)}  "
+        f"({PCA_PROJECTION_PNG.stat().st_size} bytes)"
+    )
+    return PCA_PROJECTION_PNG
+
+
+# ----------------------------------------------------------------------
 # Driver
 # ----------------------------------------------------------------------
 def main() -> int:
@@ -459,6 +664,8 @@ def main() -> int:
     metrics = cell_6_evaluate(pca_det, rf_det, X_test, y_test)
     cell_7_save(pca_det, rf_det)
     cell_8_readme(metrics)
+    cell_9_confusion_figure(rf_det, X_test, y_test)
+    cell_9b_pca_projection_figure(pca_det, windows)
     return 0
 
 

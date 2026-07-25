@@ -30,8 +30,9 @@ The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/PO
 ## Dashboard
 
 
+![DDoS SDN dashboard, UDP flood replay](docs/screenshots/dashboard_udp_flood.png)
 
-<img width="1273" height="649" alt="image" src="https://github.com/user-attachments/assets/fd461d6d-7ebb-4289-b91f-a1f10d548004" />
+*Default view: UDP flood replay. `entropy_dst` and `entropy_src` both collapse to zero at window 2, all three detectors flag ATTACK, and RF classifies the window as `UDP_FLOOD`. Screenshot is committed under `docs/screenshots/` rather than hotlinked, so it survives independently of any CDN.*
 
 
 **Live dashboard:** [ddos-sdn-demo.streamlit.app](https://ddos-sdn-demo.streamlit.app)
@@ -40,7 +41,7 @@ The demo runs on macOS, Linux, and Windows without sudo, root, or SDN/Mininet/PO
 streamlit run dashboard.py
 ```
 
-Five stacked panels: per-window entropy time-series (`entropy_dst`, `entropy_src`, `entropy_size` with the 1.66-bit threshold line drawn), detector verdict grid (entropy / PCA / RF traffic-lights for the last 20 windows), 2D PCA projection scatter colored by `verdict_pca`, the would-install `ofp_flow_mod` drop-rule table, and the East-West coordinator view. The default replays `samples/normal.pcap` then `samples/attack.pcap` window-by-window with a 100 ms tick so a reviewer watches the entropy lines collapse on the attack windows. The replay takes about five seconds.
+Five stacked panels: per-window entropy time-series (`entropy_dst`, `entropy_src`, `entropy_size` with the 1.66-bit threshold line drawn), detector verdict grid (entropy / PCA / RF traffic-lights for the last 20 windows), window scatter (`entropy_dst` vs `entropy_src`) colored by `verdict_pca`, the would-install `ofp_flow_mod` drop-rule table, and the East-West coordinator view. The default replays `samples/normal.pcap` then `samples/attack.pcap` window-by-window with a 100 ms tick so a reviewer watches the entropy lines collapse on the attack windows. The replay takes about five seconds.
 
 The dashboard replays four attack classes (UDP flood, SYN flood, slow-loris, NTP amplification) through the three-detector chain, selected from a dropdown at the top of the page. `MLDetector.classify()` names the specific attack class per window in the verdict grid's `RF class` column; entropy and PCA provide binary verdicts as before, and the 13-field telemetry contract is unchanged (class labels travel alongside the records, not inside them). Panel 5 illustrates the Phase 4b East-West coordinator correlating telemetry across two workers to trigger distributed drop rules, replayed from a committed fixture since Community Cloud cannot run POX or Mininet.
 
@@ -94,26 +95,28 @@ Different plane, same job. The two views (wire-and-VLAN at the bottom, controlle
 
 The SDN flood doesn't just push packets; it targets controller queue depth. One controller is a SPOF, and a flood split across topology partitions can evade single-controller detection by keeping each individual partition's per-window entropy too noisy to threshold. The companion report's Chapter 7 names this gap as future work; **Phase 4b implements it** as an opt-in East-West coordinator.
 
+```mermaid
+flowchart TD
+    SA["Mininet partition A<br/>switches dpid 1, 2"]
+    SB["Mininet partition B<br/>switches dpid 3, 4"]
+    W1["worker-1<br/>POX + EntropyAnalyzer"]
+    W2["worker-2<br/>POX + EntropyAnalyzer"]
+    CO["coordinator<br/>correlates telemetry, issues drop rules<br/>JSON over TCP, port 9876"]
+
+    SA -- "OpenFlow 1.0" --> W1
+    SB -- "OpenFlow 1.0" --> W2
+
+    W1 -- "WORKER_TELEMETRY" --> CO
+    W2 -- "WORKER_TELEMETRY" --> CO
+    CO -- "DROP_RULE_COMMAND" --> W1
+    CO -- "DROP_RULE_COMMAND" --> W2
+    W1 -. "ACK" .-> CO
+    W2 -. "ACK" .-> CO
 ```
-              ┌────────────────────────────────────────┐
-              │             coordinator                │
-              │   (correlates worker telemetry,        │
-              │    issues DROP_RULE_COMMANDs)          │
-              └─────────┬──────────────────┬───────────┘
-                        │                  │
-              JSON over TCP, line-delimited (port 9876)
-                        │                  │
-                ┌───────┴───────┐   ┌──────┴────────┐
-                │   worker-1    │   │   worker-2    │
-                │  (POX, dpid   │   │  (POX, dpid   │
-                │   1 + 2)      │   │   3 + 4)      │
-                └───────┬───────┘   └──────┬────────┘
-                        │ OpenFlow         │ OpenFlow
-                ┌───────┴───────┐   ┌──────┴────────┐
-                │   Mininet     │   │   Mininet     │
-                │  partition A  │   │  partition B  │
-                └───────────────┘   └───────────────┘
-```
+
+![Dashboard Panel 5, coordinator correlation scenario](docs/screenshots/dashboard_coordinator.png)
+
+*Panel 5 in the dashboard: a pre-recorded two-worker correlation scenario. Records 5 and 6, where the workers report different `top_src` values in the same time bucket, correctly produce no drop rule. Records 7 and 8, where both workers report `top_src=10.0.0.5`, trigger a `DROP_RULE_COMMAND` to each worker, scoped to that worker's own dpid. Records 13 to 16 show sustained re-corroboration on the attacker's retry. The fixture is verified against the real `CoordinatorServer.correlate()` by [test_coordinator_fixture_matches_real_correlation](tests/test_dashboard.py).*
 
 The trigger condition is named explicitly: **when two or more workers report the same `top_src` with `verdict_entropy=ATTACK` within `tolerance_window_seconds` (default 1s), the coordinator issues a `DROP_RULE_COMMAND` to each corroborating worker, and each one installs the same `ofp_flow_mod` against its local switch.** The single-controller `ofp_flow_mod` install path from Phase 3 is unchanged; the multi-controller path is additive. If the coordinator is unreachable, each worker degrades to standalone Phase 3 mode, and the network keeps forwarding without distributed correlation.
 
@@ -196,6 +199,16 @@ The generator draws each class's per-window parameters from a distribution and d
 | RandomForest   | 0.9875 | 1.0000 | 1.0000 | 1.0000 | 0.9270 |
 
 RandomForest's five-way per-class F1: UDP_FLOOD 0.9103, SYN_FLOOD 0.9524, SLOWLORIS 1.0000, NTP_AMP 0.7848, BENIGN 0.9877.
+
+![Multi-class RF confusion matrix](docs/screenshots/confusion_matrix.png)
+
+*5x5 confusion matrix on the 240-window held-out split. The diagonal is correct classifications; the off-diagonal mass sits on the two class pairs the generator was designed to overlap, NTP_AMP against UDP_FLOOD and NTP_AMP against SYN_FLOOD. Macro F1 = 0.9270. Regenerated by `python notebooks/train_pca_and_rf.py`, which asserts these exact cell counts before writing the file.*
+
+![PCA projection with the benign threshold ellipse](docs/screenshots/pca_projection.png)
+
+*PCA projection of the feature matrix, colored by class. The solid ellipse is the 99th-percentile Mahalanobis threshold that `PCADetector.verdict()` actually gates on. Most attack windows fall INSIDE it, which is why PCA-gated recall is 0.35 rather than the 1.0 the pre-Phase-4c dataset reported: measured across the full dataset, UDP_FLOOD falls outside the boundary 56% of the time, SYN_FLOOD 54%, NTP_AMP 2%, SLOWLORIS 0.5%. See [What the PCA row means](#what-the-pca-row-means) for why the threshold is miscalibrated against a realistically broad benign cluster.*
+
+*Worth reading alongside the confusion matrix above: SLOWLORIS is the class sitting furthest inside the ellipse, and it is also the class RandomForest scores 1.0000 on. That is a methodology observation rather than a defect. Slow-loris is application-layer and rate-limited, so its packet-level features look ordinary to a linear projection, while the supervised model reads the collapsed `pps` feature directly. Detectors that fail on different inputs are the point of running three of them.*
 
 Five-way confusion matrix (rows = true, cols = predicted, order `[BENIGN, UDP_FLOOD, SYN_FLOOD, SLOWLORIS, NTP_AMP]`):
 
@@ -297,6 +310,34 @@ SDN / OpenFlow 1.0; POX controller framework; L2/L3 switching and ARP cache mana
 **Cybersecurity (secondary).**
 ML for security (PCA-based unsupervised anomaly detection, RandomForest supervised classification, train/test discipline on CICDDoS2019); threat modeling (STRIDE for SDN control planes); Python tooling (type hints, argparse, structured JSON-line logging, pytest); CI/CD; threat intelligence and OSINT in companion work.
 
+## Dashboard gallery
+
+One screenshot per attack class, captured from `streamlit run dashboard.py` with the class selector at the top of the page. Every window below is real detector output over the committed PCAP corpus, not a mockup.
+
+### UDP flood
+
+![UDP flood](docs/screenshots/dashboard_udp_flood.png)
+
+High-volume single-target flood: `entropy_dst` and `entropy_src` collapse together at window 2, because one attacker aims every packet at one victim. All three detectors agree, and RF classifies the window as `UDP_FLOOD`.
+
+### SYN flood
+
+![SYN flood](docs/screenshots/dashboard_syn_flood.png)
+
+Spoofed sources keep `entropy_src` high near 7.0 while `entropy_dst` collapses to zero. That asymmetry is the signature: many sources, one destination. RF classifies as `SYN_FLOOD`, reading the fixed 60-byte frame size to separate it from NTP amplification.
+
+### Slow-loris
+
+![Slow-loris](docs/screenshots/dashboard_slowloris.png)
+
+Low and slow. `pps` drops to about 13 against a flood's ~1000, which is the defining signal; `entropy_size` rises to ~2.57 as the keep-alive writes vary in length, and `entropy_src` settles near 4.1 for the handful of long-lived sources. PCA misses this class entirely (0.5% of windows flagged), while RF scores F1 = 1.0000 on it. This is the clearest case in the project of the three detectors covering genuinely different ground.
+
+### NTP amplification
+
+![NTP amplification](docs/screenshots/dashboard_ntp_amp.png)
+
+Reflected off a pool of 55 NTP servers, so `entropy_src` stays high but bounded by the reflector count, and `entropy_size` rises with the varied response payloads. Entropy and RF flag it; PCA does not, for the same calibration reason it misses slow-loris. NTP_AMP is also the hardest class for RF at F1 = 0.7848, since it overlaps both UDP_FLOOD and SYN_FLOOD by construction.
+
 ## Roadmap
 
 The 5-phase implementation plan is captured in [PROJECT_IMPROVEMENT_PROMPT.md](PROJECT_IMPROVEMENT_PROMPT.md). Current status:
@@ -310,6 +351,8 @@ The 5-phase implementation plan is captured in [PROJECT_IMPROVEMENT_PROMPT.md](P
 - **Phase 4c: Cross-class evaluation.** ✅ This commit. Synth dataset widened from one attack class to four (UDP flood, SYN flood, slow-loris, NTP amplification) with documented per-class feature signatures; `MLDetector.classify()` names the class while `verdict()` and the 13-field telemetry contract stay binary and unchanged; PCA stays benign-only unsupervised; multi-class evaluation table in [§ Evaluation](#evaluation) with an explicit honesty note on synthetic separability. Phase 4c is the final phase of this punch-list.
 
 Everything beyond this point is future work (post-portfolio), not a planned phase: evaluation against real CICDDoS2019 / DARPA / MAWI captures, L4 protocol fidelity in the synth generators, coordinator mTLS with signed commands and replay protection, end-to-end coordinator socket integration tests, and surfacing class labels in the dashboard or the telemetry schema.
+
+Legacy screenshots from the original 2021 academic build are preserved at [docs/screenshots/legacy/](docs/screenshots/legacy/) for provenance; they show output of code that predates the Phase 0 restructure.
 
 ## Real execution evidence
 
