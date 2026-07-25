@@ -10,9 +10,10 @@ in dashboard.py and is unchanged across the two entry paths
 # Streamlit Community Cloud is PUBLIC HOSTING. Anything stored alongside
 # this file is world-readable. The dashboard reads only world-readable
 # committed files (samples/*.pcap, models/*.joblib, config.yaml). No
-# os.getenv() calls. No streamlit.secrets usage. The `--mode tail` path
-# would read $telemetry_path from config, but that path is `-` (stdout)
-# by default: Cloud users hit the replay path, never tail.
+# os.getenv() calls. No streamlit.secrets usage. Phase 4d.1 note: this
+# comment used to reference a `--mode tail` path; no such flag was ever
+# implemented, and Cloud passes no arguments here anyway, so every option
+# in the dashboard is a widget rather than a CLI flag.
 #
 # If you ever add a feature that needs a secret (private dataset URL,
 # API token), do it via streamlit.secrets with the secret values
